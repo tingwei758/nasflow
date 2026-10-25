@@ -1,0 +1,24 @@
+# superpowers brainstorm artifacts (mockups, local server state)
+.superpowers/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# local config holds secrets (TMDB key, qB password)
+config.toml
+.env
+
+# flow runtime state
+*.db
+*.sqlite3
+
+.DS_Store
+
+# upstream reference clone, not part of this project
+hlink/
