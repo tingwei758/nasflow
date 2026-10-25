@@ -56,15 +56,15 @@ _EDITION_WORDS = {
 }
 
 _SPLIT_RE = re.compile(r"[.\s_]+")
-_EXTENSIONS = (".mkv", ".mp4", ".avi", ".rmvb", ".ts", ".m2ts", ".iso")
+
+# A trailing ".<2-4 alnum>" on a release name is a container extension. Matched
+# generically rather than against a list, because the list of media extensions
+# belongs to MediaConfig and this parser takes only a string.
+_EXTENSION_RE = re.compile(r"\.[A-Za-z][A-Za-z0-9]{1,3}$")
 
 
 def _strip_extension(name: str) -> str:
-    lowered = name.lower()
-    for ext in _EXTENSIONS:
-        if lowered.endswith(ext):
-            return name[: -len(ext)]
-    return name
+    return _EXTENSION_RE.sub("", name)
 
 
 def _clean_chinese_title(raw: str) -> str | None:
