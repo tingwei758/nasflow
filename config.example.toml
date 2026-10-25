@@ -1,0 +1,66 @@
+# flow configuration — copy to config.toml and edit.
+#
+# config.toml is git-ignored because it holds your TMDB key and qBittorrent
+# password. Both can instead be supplied as FLOW_TMDB_API_KEY and
+# FLOW_QB_PASSWORD environment variables, which take precedence over this file.
+
+# Host path to qBittorrent's completed downloads. flow only ever reads here.
+downloads_root = "/volume1/docker/qb/downloads"
+
+# Host path flow hardlinks into. MUST be on the same Synology share as
+# downloads_root — hardlinks cannot cross shares (each DSM shared folder is a
+# separate btrfs subvolume, so `ln` fails with EXDEV).
+staging_root = "/volume1/docker/qb/staging"
+
+db_path = "/config/flow.db"
+
+# qBittorrent WebUI. flow polls this; it never uses the AutoRun hook, because
+# the filesystem cannot distinguish a complete download from an incomplete one.
+qb_url = "http://qbittorrent:8080"
+qb_username = "admin"
+qb_password = "change-me"
+
+# The path prefix qBittorrent reports inside its own container, mapped onto
+# downloads_root above.
+container_downloads_prefix = "/downloads"
+
+tmdb_api_key = "change-me"
+tmdb_language = "zh-CN"
+
+poll_interval_s = 60
+
+# Identification confidence. flow stops and asks rather than guessing when the
+# best match scores below score_accept, or beats the runner-up by less than
+# score_gap.
+score_accept = 0.80
+score_gap = 0.15
+
+# Chinese-only release names have no English title to cross-check, so they stop
+# for confirmation even when the score is high. Set false to trust the score.
+require_english_title = true
+
+# Serve the board on the LAN only. Do NOT publish this port to the internet —
+# flow has no authentication by design.
+bind_host = "0.0.0.0"
+bind_port = 8080
+
+[layout]
+# Defaults match the existing library convention. Templates use str.format.
+movies_dirname = "Movies"
+tv_dirname = "TV Shows"
+season_dirname = "Season {season}"          # "Season 1", not "Season 01"
+movie_dirname = "{title} ({year})"
+movie_filename = "{title} ({year})"         # stem only; extension is preserved
+show_dirname = "{title} ({year})"
+episode_filename = "{title} - S{season:02d}E{episode:02d}"
+specials_season = 0                         # SxxE00 specials land in "Season 0"
+default_season = 1                          # files carrying Exx but no Sxx
+
+[media]
+video_extensions = [".mkv", ".mp4", ".avi", ".rmvb", ".ts", ".m2ts"]
+subtitle_extensions = [".srt", ".ass", ".ssa", ".sub", ".idx"]
+# Deliberately empty: .nfo files and posters are NOT linked. Plex fetches its
+# own metadata, and a stale .nfo actively misleads its agent.
+companion_extensions = []
+exclude_name_patterns = ["*sample*", "*trailer*"]
+min_video_bytes = 50_000_000

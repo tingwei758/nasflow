@@ -25,3 +25,6 @@ hlink/
 
 # isolated worktrees
 .worktrees/
+
+# python venv
+.venv/
