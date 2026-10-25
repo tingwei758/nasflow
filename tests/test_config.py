@@ -1,3 +1,4 @@
+import ast
 import textwrap
 from pathlib import Path
 
@@ -98,11 +99,51 @@ def test_defaults_match_the_spec(tmp_path):
     assert cfg.require_english_title is True
 
 
+FORBIDDEN = ["/volume1", "/downloads", "TV Shows", "Season ", ".mkv", ".srt"]
+
+
+def _code_string_literals(source: str) -> list[str]:
+    """Every string literal in `source` that is not a docstring.
+
+    Comments never reach the AST, so they are excluded for free. Docstrings are
+    excluded deliberately: explaining `/downloads` in prose is documentation,
+    while writing it in code is the thing the spec forbids.
+    """
+    tree = ast.parse(source)
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                docstrings.add(id(body[0].value))
+    return [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docstrings
+    ]
+
+
 def test_no_hardcoded_paths_or_templates_outside_config():
-    forbidden = ["/volume1", "/downloads", "TV Shows", "Season ", ".mkv", ".srt"]
     for py in (SRC / "flow").rglob("*.py"):
         if py.name == "config.py":
             continue
-        text = py.read_text(encoding="utf-8")
-        for token in forbidden:
-            assert token not in text, f"{py.name} hardcodes {token!r}"
+        for literal in _code_string_literals(py.read_text(encoding="utf-8")):
+            for token in FORBIDDEN:
+                assert token not in literal, f"{py.name} hardcodes {token!r} in {literal!r}"
+
+
+def test_the_guard_actually_catches_a_violation():
+    """The guard is only worth having if it fails on a real offender."""
+    offender = 'def f():\n    return "/volume1/docker/qb/staging"\n'
+    literals = _code_string_literals(offender)
+    assert any("/volume1" in lit for lit in literals)
+
+
+def test_the_guard_ignores_docstrings_and_comments():
+    documented = '"""Maps /downloads onto the host."""\n# also /volume1 here\nX = 1\n'
+    assert _code_string_literals(documented) == []
