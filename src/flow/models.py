@@ -51,3 +51,26 @@ class Content:
     videos: list[VideoFile]
     subtitles: list[Path]
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One TMDB result, scored against what the release name claimed."""
+
+    tmdb_id: int
+    kind: str
+    title_zh: str | None
+    title_en: str
+    year: int | None
+    overview: str
+    poster_path: str | None
+    score: float
+    reason: str
+
+
+@dataclass(frozen=True)
+class Identification:
+    """A settled answer: this content is this TMDB entry."""
+
+    candidate: Candidate
+    kind: str
