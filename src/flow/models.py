@@ -7,6 +7,8 @@ lets the whole identification path be tested without a filesystem or network.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -23,3 +25,29 @@ class ParsedName:
     year: int | None
     season: int | None
     source_name: str
+
+
+@dataclass(frozen=True)
+class VideoFile:
+    """One video inside a download, with whatever episode markers its own name carries."""
+
+    path: Path
+    size: int
+    season: int | None
+    episode: int | None
+
+
+@dataclass(frozen=True)
+class Content:
+    """What the files inside a download say about it.
+
+    `kind` is decided by the files, never by the torrent name: episode markers
+    in the filenames mean a show, a lone video means a movie. This is what makes
+    multi-season packs and Chinese-only names tractable.
+    """
+
+    root: Path
+    kind: Literal["movie", "tv", "unknown"]
+    videos: list[VideoFile]
+    subtitles: list[Path]
+    reason: str = ""
