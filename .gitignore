@@ -22,3 +22,6 @@ config.toml
 
 # upstream reference clone, not part of this project
 hlink/
+
+# isolated worktrees
+.worktrees/
