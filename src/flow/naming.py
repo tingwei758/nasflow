@@ -125,11 +125,17 @@ def parse_release_name(name: str) -> ParsedName:
             guess = guessit(remainder)
         except Exception:
             guess = {}
-        raw_title = guess.get("title")
-        if isinstance(raw_title, str) and _LATIN_RE.search(raw_title):
-            title_en = raw_title.strip() or None
         year = _as_int(guess.get("year"))
         season = _as_int(guess.get("season"))
+
+        raw_title = guess.get("title")
+        if not isinstance(raw_title, str) or not raw_title.strip():
+            # guessit sometimes consumes a short title as metadata (a lone "X2"
+            # becomes a bonus-feature marker), leaving no title at all. Recover
+            # the tokens that precede the first thing it did recognise.
+            raw_title = _leading_tokens(remainder, year, season)
+        if isinstance(raw_title, str) and _LATIN_RE.search(raw_title):
+            title_en = raw_title.strip() or None
 
     return ParsedName(
         title_en=title_en,
@@ -138,6 +144,27 @@ def parse_release_name(name: str) -> ParsedName:
         season=season,
         source_name=name,
     )
+
+
+_METADATA_TOKEN_RE = re.compile(
+    r"^(?:\d{3,4}[pi]|S\d{1,2}(?:-S?\d{1,2})?|E\d{1,3}|19\d{2}|20\d{2})$", re.IGNORECASE
+)
+
+
+def _leading_tokens(remainder: str, year: int | None, season: int | None) -> str:
+    """Tokens before the first recognisable metadata token, as a title."""
+    words = []
+    for token in _SPLIT_RE.split(remainder):
+        if not token:
+            continue
+        if _METADATA_TOKEN_RE.match(token):
+            break
+        if year is not None and token == str(year):
+            break
+        if season is not None and token.lower() == f"s{season:02d}":
+            break
+        words.append(token)
+    return " ".join(words)
 
 
 def _as_int(value: object) -> int | None:

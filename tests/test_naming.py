@@ -73,3 +73,17 @@ def test_pure_chinese_non_media_name_yields_no_english_title():
 def test_parsing_never_raises_on_odd_input():
     for odd in ("", ".", "￡", "[]", "1080p", "....mkv"):
         parse_release_name(odd)
+
+
+def test_title_recovered_when_guessit_returns_none():
+    p = parse_release_name("X2.2003.2160p.DSNP.WEB-DL.DDP5.1.HDR.HEVC-HHWEB")
+    assert p.title_en == "X2" and p.year == 2003
+
+
+def test_every_real_download_name_yields_some_title():
+    """Regression guard: a name flow cannot title at all can never be matched."""
+    for name, _ in CORPUS:
+        p = parse_release_name(name)
+        if "CE教学实例应用" in name:
+            continue  # genuinely not media; no title expected
+        assert p.title_en or p.title_zh, f"no title of either kind for {name!r}"

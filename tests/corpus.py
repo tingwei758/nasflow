@@ -101,5 +101,11 @@ CORPUS: list[tuple[str, dict]] = [
         "Silo.S03.2160p.ATVP.WEB-DL.HDR.H.265.DDP5.1.Atmos-ADWeb",
         {"title_en": "Silo", "title_zh": None, "season": 3},
     ),
+    (
+        # guessit reads a lone "X2" as a bonus-feature marker and returns no
+        # title at all; the leading-token fallback has to recover it.
+        "X2.2003.2160p.DSNP.WEB-DL.DDP5.1.HDR.HEVC-HHWEB",
+        {"title_en": "X2", "title_zh": None, "year": 2003, "season": None},
+    ),
 ]
 # fmt: on
