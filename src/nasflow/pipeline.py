@@ -18,11 +18,12 @@ from .config import Config
 from .db import Store
 from .decide import decide
 from .layout import plan_links
-from .linker import LinkConflict, execute_links, prune_empty_dirs
+from .linker import LinkConflict, OutsideStaging, execute_links, prune_empty_dirs
 from .models import Candidate, Identification
 from .naming import parse_release_name
 from .pathmap import to_host_path
 from .qbit import QbitUnavailable
+from .redact import redact
 from .scan import scan_content
 from .tmdb import TmdbUnavailable
 
@@ -90,7 +91,7 @@ class Pipeline:
                     self.store.set_state(
                         torrent.hash,
                         "needs_you",
-                        reason=f"unexpected error: {type(exc).__name__}: {exc}",
+                        reason=self._redact(f"unexpected error: {type(exc).__name__}: {exc}"),
                         retry=True,
                     )
 
@@ -224,7 +225,16 @@ class Pipeline:
 
         self._link(hash_, content, Identification(candidate, kind))
 
+    def _redact(self, text: str) -> str:
+        # Exception text reaches the board; no secret may ride along with it.
+        return redact(text, (self.cfg.tmdb_api_key, self.cfg.qb_password))
+
     def _link(self, hash_: str, content, ident: Identification) -> None:
+        if ident.candidate.year is None:
+            # Also guards a human's pick: decide() already stops on these.
+            reason = "the TMDB entry has no year, so its folder can't be named"
+            self.store.set_state(hash_, "needs_you", reason=reason)
+            return
         links = plan_links(content, ident, self.cfg.staging_root, self.cfg.layout)
         if not links:
             self.store.set_state(hash_, "needs_you", reason="nothing to link")
@@ -232,6 +242,10 @@ class Pipeline:
 
         try:
             execute_links(links, self.cfg.staging_root)
+        except OutsideStaging as exc:
+            # A symlink inside staging points elsewhere; retrying cannot fix that.
+            self.store.set_state(hash_, "needs_you", reason=f"refused: {exc}")
+            return
         except LinkConflict as exc:
             self.store.set_state(
                 hash_, "needs_you", reason=f"destination conflict: {exc}", retry=True

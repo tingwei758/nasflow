@@ -18,6 +18,7 @@ from .db import Store
 from .linker import probe_hardlink
 from .pipeline import Pipeline
 from .qbit import QbitClient
+from .redact import RedactingFormatter
 from .tmdb import TmdbClient
 from .web.app import create_app
 
@@ -80,6 +81,13 @@ def configure_logging() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
+def redact_secrets(secrets, handlers=None) -> None:
+    """Mask secrets in everything the given (default: root) log handlers write."""
+    for handler in handlers if handlers is not None else logging.getLogger().handlers:
+        inner = handler.formatter or logging.Formatter()
+        handler.setFormatter(RedactingFormatter(inner, secrets))
+
+
 def resolve_config_path(argv: list[str]) -> Path:
     parser = argparse.ArgumentParser(prog="nasflow")
     parser.add_argument("--config", type=Path, default=None)
@@ -123,6 +131,7 @@ def main(argv: list[str] | None = None) -> None:
         _fail(f"config file not found: {path}")
     except ValueError as exc:
         _fail(f"invalid config {path}: {exc}")
+    redact_secrets([cfg.tmdb_api_key, cfg.qb_password])
     try:
         check_same_filesystem(cfg)
     except ValueError as exc:

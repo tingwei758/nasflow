@@ -547,3 +547,50 @@ def test_ignore_of_a_waiting_item_still_works(env):
     p.poll_once()
     p.ignore(t.hash)
     assert store.get(t.hash).state == "ignored"
+
+
+# ---- review 2: stops that can never clear, yearless picks, secrets -----------
+
+def test_a_link_escaping_staging_stops_without_retrying(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    elsewhere = downloads.parent / "elsewhere"
+    elsewhere.mkdir()
+    (staging / "Movies").symlink_to(elsewhere)
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    item = store.get(t.hash)
+    assert item.state == "needs_you" and "outside" in item.reason and item.retry is False
+    assert not any(elsewhere.iterdir())
+
+
+def test_resolving_to_a_yearless_entry_stops_instead_of_naming_a_none_folder(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", None, 0.95)]}
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    assert store.get(t.hash).state == "needs_you"
+    p.resolve(t.hash, 1)
+    item = store.get(t.hash)
+    assert item.state == "needs_you" and "year" in item.reason
+    assert not any(staging.rglob("*.mkv"))
+
+
+def test_unexpected_error_text_never_carries_a_secret(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    cfg = replace(cfg, tmdb_api_key="tmdb-secret-123", qb_password="qb-secret-456")
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+
+    def leaky(parsed, kind):
+        raise RuntimeError("GET https://api/search?api_key=tmdb-secret-123 pw=qb-secret-456")
+
+    tmdb.search = leaky
+    build(cfg, store, qbit, tmdb).poll_once()
+    reason = store.get(t.hash).reason
+    assert "tmdb-secret-123" not in reason and "qb-secret-456" not in reason
+    assert "RuntimeError" in reason

@@ -163,3 +163,22 @@ def test_startup_fails_when_the_hardlink_probe_fails(tmp_path, monkeypatch, caps
     with pytest.raises(SystemExit):
         flow_main.main(["--config", "x.toml"])
     assert "Invalid cross-device link" in capsys.readouterr().err
+
+
+def test_log_output_never_carries_a_secret():
+    import io
+    import logging
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("nasflow.test-redaction")
+    logger.addHandler(handler)
+    logger.propagate = False
+    flow_main.redact_secrets(["tmdb-secret-123", "", "abc"], handlers=[handler])
+    try:
+        raise RuntimeError("url?api_key=tmdb-secret-123")
+    except RuntimeError:
+        logger.exception("lookup for %s failed", "tmdb-secret-123")
+    out = stream.getvalue()
+    assert "tmdb-secret-123" not in out and "RuntimeError" in out
