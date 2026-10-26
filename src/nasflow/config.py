@@ -84,14 +84,6 @@ class Config:
 
 _SECRET_FIELDS = {"tmdb_api_key", "qb_password"}
 
-# TOML key -> environment variable that overrides it.
-_ENV_OVERRIDES = {
-    "tmdb_api_key": "NASFLOW_TMDB_API_KEY",
-    "qb_password": "NASFLOW_QB_PASSWORD",
-    "qb_username": "NASFLOW_QB_USERNAME",
-    "qb_url": "NASFLOW_QB_URL",
-}
-
 _PATH_FIELDS = {"downloads_root", "staging_root", "db_path"}
 _TUPLE_FIELDS = {
     "video_extensions",
@@ -126,21 +118,12 @@ def _check_disjoint(downloads: Path, staging: Path) -> None:
 
 
 def load_config(path: Path) -> Config:
-    """Read `path` as TOML and return a validated `Config`.
-
-    `NASFLOW_*` environment variables take precedence over file values, so secrets
-    can be supplied by the container runtime instead of written to disk.
-    """
+    """Read `path` as TOML and return a validated `Config`."""
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
 
     layout = _build(LayoutConfig, raw.pop("layout", {}), "layout")
     media = _build(MediaConfig, raw.pop("media", {}), "media")
-
-    for key, env_var in _ENV_OVERRIDES.items():
-        env_value = os.environ.get(env_var)
-        if env_value is not None:
-            raw[key] = env_value
 
     top_level = {f.name for f in fields(Config)}
     unknown = set(raw) - top_level

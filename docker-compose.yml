@@ -1,4 +1,5 @@
-# nasflow — every host path comes from .env (copy .env.example to .env).
+# nasflow — every setting nasflow itself reads is in config.toml. The values
+# here are the ones Docker needs before nasflow starts; edit them in place.
 services:
   nasflow:
     build: .
@@ -6,7 +7,7 @@ services:
     container_name: nasflow
     restart: unless-stopped
     # Same owner as qBittorrent's files, so nasflow may hardlink them.
-    user: "${NASFLOW_PUID:-911}:${NASFLOW_PGID:-911}"
+    user: "911:911"
     environment:
       NASFLOW_CONFIG: /config/config.toml
     volumes:
@@ -15,8 +16,10 @@ services:
       # downloads and staging separately (or downloads :ro) makes every link
       # fail with EXDEV. nasflow's own code confines writes to staging_root.
       # The media library is deliberately not mounted at all.
-      - ${NASFLOW_QB_ROOT}:${NASFLOW_QB_ROOT}
-      - ${NASFLOW_CONFIG_DIR}:/config
+      - /volume1/docker/qb:/volume1/docker/qb
+      # config.toml and nasflow.db.
+      - /volume1/docker/nasflow:/config
     ports:
-      # LAN only. nasflow has no authentication by design.
-      - "${NASFLOW_LAN_IP:?set NASFLOW_LAN_IP in .env}:${NASFLOW_PORT:-9987}:9987"
+      # LAN only: nasflow has no authentication by design. The NAS's LAN
+      # address, the port to open the board on, and config.toml's bind_port.
+      - "192.168.4.126:9987:9987"

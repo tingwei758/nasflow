@@ -43,16 +43,11 @@ def test_load_config_reads_toml(tmp_path):
     assert cfg.score_accept == 0.80
 
 
-def test_env_overrides_tmdb_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("NASFLOW_TMDB_API_KEY", "from-env")
+def test_config_file_is_the_only_source_of_settings(tmp_path, monkeypatch):
+    for var in ("NASFLOW_TMDB_API_KEY", "NASFLOW_QB_PASSWORD", "NASFLOW_QB_URL"):
+        monkeypatch.setenv(var, "from-env")
     cfg = load_config(write_minimal(tmp_path))
-    assert cfg.tmdb_api_key == "from-env"
-
-
-def test_env_overrides_qb_password(tmp_path, monkeypatch):
-    monkeypatch.setenv("NASFLOW_QB_PASSWORD", "pw-from-env")
-    cfg = load_config(write_minimal(tmp_path))
-    assert cfg.qb_password == "pw-from-env"
+    assert "from-env" not in (cfg.tmdb_api_key, cfg.qb_password, cfg.qb_url)
 
 
 def test_missing_required_field_raises(tmp_path):
