@@ -29,6 +29,25 @@ Open `http://<FLOW_LAN_IP>:<FLOW_PORT>` (e.g. `http://192.168.4.126:9987`).
 A card leaves the board once its folder is gone from staging, so there is
 nothing to mark as done.
 
+Some things to expect:
+
+- **A card stops once and waits.** When flow stops because it isn't sure, it
+  doesn't ask TMDB again until you act. It *does* retry stops that can clear
+  on their own: TMDB being unreachable, or a destination already being taken.
+- **A second copy of something already in staging stops** with a destination
+  conflict, because flow never overwrites. A 4K re-download is one example.
+  Move the first copy to the library and the second one links on the next
+  poll.
+- **Seasons from separate downloads share a show folder.** If Season 1 and
+  Season 2 are both in staging, both cards stay in Ready until the show
+  folder is gone. Move each `Season N` folder, or the whole show folder.
+- **Films or extras inside a TV pack are not filed as episodes.** A series
+  pack that also contains the films is one example. The card stops and names
+  them; confirming links the episodes only.
+- **Startup refuses a broken setup** instead of silently failing every link.
+  It checks that downloads and staging don't overlap, and makes one test
+  hardlink (`staging/.flow-link-probe`), which it removes straight away.
+
 ## The one manual step: move into the library with File Station
 
 Move finished folders from `docker/qb/staging/Movies` and
