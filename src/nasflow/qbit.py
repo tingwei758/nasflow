@@ -119,7 +119,8 @@ class QbitClient:
         Right after qBittorrent starts, every torrent is rechecked and none of
         them counts as completed yet, so a list taken then is not the whole set.
         """
-        return any(str(raw.get("state", "")).startswith(_IN_FLIGHT_PREFIXES) for raw in self._list())
+        states = (str(raw.get("state", "")) for raw in self._list())
+        return any(state.startswith(_IN_FLIGHT_PREFIXES) for state in states)
 
 
 def _to_torrent(raw: dict) -> Torrent:

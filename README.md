@@ -17,7 +17,7 @@ the originals, which nasflow never renames, moves, or modifies.
 
 ## The board
 
-Open `http://<NASFLOW_LAN_IP>:<NASFLOW_PORT>` (e.g. `http://192.168.4.126:9987`).
+Open `http://192.168.4.126:9987` (the address and port in `docker-compose.yml`).
 
 | Column | Meaning |
 |---|---|
@@ -77,16 +77,15 @@ library is up for replacement.
    - `/volume1/docker/qb/staging`
 
    Both must be writable by UID/GID `911`, the owner of qBittorrent's files.
-3. **Create `.env`** from `.env.example` in the repository folder. Check
-   `NASFLOW_LAN_IP` and `NASFLOW_PORT`.
+3. **Check `docker-compose.yml`.** It holds the few values Docker needs before
+   nasflow starts: the shared qB folder, the config folder, the NAS's LAN
+   address and port, and the user (`911:911`). Edit them in place if yours
+   differ.
 4. **Create `/volume1/docker/nasflow/config.toml`** from `config.example.toml`. Fill in:
    - `qb_password`: the qBittorrent WebUI password
    - `tmdb_api_key`: the same key nastool uses (`rmt_tmdbkey` under `app:` in
      `/volume1/docker/nastools/config/config.yaml`). nasflow keeps its own copy and
      does not depend on nastool at runtime.
-
-   Alternatively, leave them out of the file and set `NASFLOW_QB_PASSWORD` /
-   `NASFLOW_TMDB_API_KEY` as container environment variables.
 5. **Container Manager → Project → Create**, point it at the repository folder
    (it picks up `docker-compose.yml`), and start it.
 
@@ -94,7 +93,7 @@ library is up for replacement.
 
 Linux refuses to hardlink across mount points (`EXDEV`). That includes two
 bind mounts of the *same* folder, and it includes a read-only mount on the
-source side. So `docker-compose.yml` mounts `NASFLOW_QB_ROOT` (the folder holding
+source side. So `docker-compose.yml` mounts `/volume1/docker/qb` (the folder holding
 both `downloads/` and `staging/`) **once, read-write, at the same path** as on
 the host.
 

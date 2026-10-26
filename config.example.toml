@@ -1,8 +1,7 @@
 # nasflow configuration — copy to config.toml and edit.
 #
-# config.toml is git-ignored because it holds your TMDB key and qBittorrent
-# password. Both can instead be supplied as NASFLOW_TMDB_API_KEY and
-# NASFLOW_QB_PASSWORD environment variables, which take precedence over this file.
+# Every setting nasflow reads is in this file, including the TMDB key and the
+# qBittorrent password; config.toml is git-ignored for that reason.
 
 # Host path to qBittorrent's completed downloads. nasflow only ever reads here.
 downloads_root = "/volume1/docker/qb/downloads"
@@ -10,8 +9,8 @@ downloads_root = "/volume1/docker/qb/downloads"
 # Host path nasflow hardlinks into. Hardlinks fail with EXDEV across either of:
 #   - Synology shares (each DSM shared folder is its own btrfs subvolume), or
 #   - Docker bind mounts (even two mounts of the same folder).
-# So staging_root and downloads_root must both live under NASFLOW_QB_ROOT, the
-# single folder docker-compose.yml mounts at the same path in the container.
+# So staging_root and downloads_root must both live under /volume1/docker/qb,
+# the single folder docker-compose.yml mounts at the same path in the container.
 staging_root = "/volume1/docker/qb/staging"
 
 db_path = "/config/nasflow.db"
@@ -53,7 +52,7 @@ title_accept = 0.75
 require_english_title = true
 
 # Inside the container nasflow listens on all interfaces; docker-compose.yml
-# publishes it on NASFLOW_LAN_IP only. Do NOT expose it to the internet — nasflow
+# publishes it on the NAS's LAN address only. Do NOT expose it to the internet — nasflow
 # has no authentication by design. Keep bind_port in step with the container
 # side of the compose port mapping (9987).
 bind_host = "0.0.0.0"
