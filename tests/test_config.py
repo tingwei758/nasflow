@@ -156,3 +156,33 @@ def test_defaults_tuned_from_the_real_nas_dry_run():
                  qb_url="x", qb_username="u", qb_password="p", tmdb_api_key="k")
     assert defaults.score_gap == 0.10
     assert defaults.bind_port == 9987
+
+
+# ---- review: staging and downloads must not overlap -------------------------
+
+def _with_roots(tmp_path, downloads, staging):
+    body = MINIMAL_TOML.replace(
+        'downloads_root = "/volume1/docker/qb/downloads"', f'downloads_root = "{downloads}"'
+    ).replace('staging_root = "/volume1/docker/qb/staging"', f'staging_root = "{staging}"')
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(body)
+    return cfg_file
+
+
+@pytest.mark.parametrize(
+    "downloads,staging",
+    [
+        ("/volume1/docker/qb/downloads", "/volume1/docker/qb"),            # staging contains downloads
+        ("/volume1/docker/qb", "/volume1/docker/qb/staging"),              # downloads contains staging
+        ("/volume1/docker/qb/downloads", "/volume1/docker/qb/downloads"),  # the same folder
+        ("/volume1/docker/qb/downloads", "/volume1/docker/qb/downloads/x/../"),
+    ],
+)
+def test_overlapping_roots_are_refused(tmp_path, downloads, staging):
+    with pytest.raises(ValueError, match="overlap"):
+        load_config(_with_roots(tmp_path, downloads, staging))
+
+
+def test_sibling_roots_with_a_shared_prefix_are_fine(tmp_path):
+    cfg = load_config(_with_roots(tmp_path, "/volume1/docker/qb/down", "/volume1/docker/qb/downloads2"))
+    assert cfg.staging_root.name == "downloads2"

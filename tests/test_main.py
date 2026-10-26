@@ -128,3 +128,38 @@ def test_missing_config_file_exits_with_a_clear_message(tmp_path, capsys):
         flow_main.main(["--config", str(tmp_path / "nope.toml")])
     assert exc.value.code != 0
     assert "nope.toml" in capsys.readouterr().err
+
+
+def test_startup_refuses_roots_on_different_filesystems(tmp_path, monkeypatch, capsys):
+    """Hardlinks cannot cross filesystems; fail loudly instead of stopping every item."""
+    cfg = _cfg(tmp_path)
+    (tmp_path / "dl").mkdir()
+    real_stat = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        result = real_stat(self, *args, **kwargs)
+        if self == tmp_path / "dl":
+            return type("S", (), {"st_dev": result.st_dev + 1})()
+        return result
+
+    monkeypatch.setattr(Path, "stat", fake_stat)
+    monkeypatch.setattr(flow_main, "load_config", lambda path: cfg)
+    monkeypatch.setattr(flow_main.uvicorn, "run", lambda *a, **k: None)
+    with pytest.raises(SystemExit):
+        flow_main.main(["--config", "x.toml"])
+    assert "different filesystems" in capsys.readouterr().err
+
+
+def test_startup_checks_staging_by_its_nearest_existing_parent(tmp_path):
+    """On first run staging does not exist yet; its parent decides."""
+    (tmp_path / "dl").mkdir()
+    flow_main.check_same_filesystem(_cfg(tmp_path))  # must not raise
+
+
+def test_startup_fails_when_the_hardlink_probe_fails(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(flow_main, "load_config", lambda path: _cfg(tmp_path))
+    monkeypatch.setattr(flow_main, "probe_hardlink", lambda d, s: "Invalid cross-device link")
+    monkeypatch.setattr(flow_main.uvicorn, "run", lambda *a, **k: None)
+    with pytest.raises(SystemExit):
+        flow_main.main(["--config", "x.toml"])
+    assert "Invalid cross-device link" in capsys.readouterr().err

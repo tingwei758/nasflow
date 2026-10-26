@@ -194,3 +194,40 @@ def test_oserror_mid_batch_rolls_back_and_surfaces_as_conflict(tmp_path, monkeyp
         execute_links([first, second], tmp_path / "staging")
     assert "Permission denied" in str(exc.value)
     assert not first.dest.exists()
+
+
+# ---- startup probe: one real hardlink, written only in staging ---------------
+
+from flow.linker import probe_hardlink  # noqa: E402
+
+
+def test_probe_succeeds_and_leaves_nothing_behind(tmp_path):
+    make_source(tmp_path)
+    staging = tmp_path / "staging"
+    assert probe_hardlink(tmp_path / "downloads", staging) is None
+    assert not any(staging.rglob("*")) if staging.exists() else True
+
+
+def test_probe_reports_cross_device_failure(tmp_path, monkeypatch):
+    import errno
+
+    make_source(tmp_path)
+
+    def exdev(src, dst):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr("flow.linker.os.link", exdev)
+    problem = probe_hardlink(tmp_path / "downloads", tmp_path / "staging")
+    assert problem and "Invalid cross-device link" in problem
+
+
+def test_probe_with_no_downloads_yet_is_skipped(tmp_path):
+    (tmp_path / "downloads").mkdir()
+    assert probe_hardlink(tmp_path / "downloads", tmp_path / "staging") is None
+
+
+def test_probe_never_touches_the_source(tmp_path):
+    src = make_source(tmp_path)
+    before = (src.stat().st_mtime, src.read_bytes())
+    probe_hardlink(tmp_path / "downloads", tmp_path / "staging")
+    assert (src.stat().st_mtime, src.read_bytes()) == before and src.stat().st_nlink == 1

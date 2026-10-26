@@ -107,6 +107,21 @@ def _build(cls: type, raw: dict[str, Any], section: str) -> Any:
     return cls(**coerced)
 
 
+def _check_disjoint(downloads: Path, staging: Path) -> None:
+    """Refuse a staging root that overlaps the downloads.
+
+    Downloads share a read-write mount with staging, so the linker's
+    confinement to staging_root is what keeps flow off the seeded files —
+    and staging is pruned of empty folders every cycle.
+    """
+    a, b = os.path.realpath(downloads), os.path.realpath(staging)
+    if os.path.commonpath([a, b]) in (a, b):
+        raise ValueError(
+            f"downloads_root ({downloads}) and staging_root ({staging}) overlap; "
+            "they must be separate folders, neither inside the other"
+        )
+
+
 def load_config(path: Path) -> Config:
     """Read `path` as TOML and return a validated `Config`.
 
@@ -135,6 +150,7 @@ def load_config(path: Path) -> Config:
 
     for key in _PATH_FIELDS:
         raw[key] = Path(raw[key])
+    _check_disjoint(raw["downloads_root"], raw["staging_root"])
 
     return replace(Config(**raw), layout=layout, media=media)
 

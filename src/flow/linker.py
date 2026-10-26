@@ -99,6 +99,49 @@ def execute_links(links: list[PlannedLink], staging_root: Path) -> None:
         raise LinkConflict(current.dest, f"filesystem error: {exc}") from exc
 
 
+# Created and removed at startup; never left behind.
+_PROBE_NAME = ".flow-link-probe"
+
+
+def _first_file(root: Path) -> Path | None:
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != "@eaDir"]
+        for name in filenames:
+            candidate = Path(dirpath) / name
+            if candidate.is_file() and not candidate.is_symlink():
+                return candidate
+    return None
+
+
+def probe_hardlink(downloads_root: Path, staging_root: Path) -> str | None:
+    """Try one real hardlink from downloads into staging, then remove it.
+
+    Returns a description of the problem, or None. This is the only check
+    that catches downloads and staging on separate bind mounts: both report
+    the same device, yet link() between them fails with EXDEV. Nothing is
+    written outside staging, and the source only gains and loses a name.
+    """
+    sample = _first_file(downloads_root)
+    if sample is None:
+        return None  # nothing downloaded yet; the first real link will tell
+    probe = staging_root / _PROBE_NAME
+    _check_confined(probe, staging_root)
+    try:
+        staging_root.mkdir(parents=True, exist_ok=True)
+        if probe.is_symlink() or probe.exists():
+            probe.unlink()
+        os.link(sample, probe)
+    except OSError as exc:
+        return f"cannot hardlink from {downloads_root} into {staging_root}: {exc}"
+    finally:
+        try:
+            if probe.is_symlink() or probe.exists():
+                probe.unlink()
+        except OSError:
+            pass
+    return None
+
+
 def prune_empty_dirs(root: Path) -> list[Path]:
     """Remove empty directories under `root`, bottom-up.
 
