@@ -97,7 +97,13 @@ def build_router(pipeline, store, cfg) -> APIRouter:
 
     @router.post("/api/items/{hash_}/resolve")
     def resolve(hash_: str, body: ResolveIn) -> dict[str, str]:
-        _require(hash_)
+        item = _require(hash_)
+        if item.state != "needs_you":
+            # Re-filing a ready item would make a second folder and lose track
+            # of the first one.
+            raise HTTPException(
+                status_code=409, detail=f"item is {item.state}, not waiting for you"
+            )
         pipeline.resolve(hash_, body.tmdb_id)
         return {"state": store.get(hash_).state}
 
@@ -117,17 +123,11 @@ def build_router(pipeline, store, cfg) -> APIRouter:
 
     @router.get("/api/items/{hash_}/search")
     def search(hash_: str, q: str) -> SearchOut:
-        item = _require(hash_)
-        parsed = parse_release_name(item.name)
-        manual = type(parsed)(
-            title_en=q, title_zh=None, year=parsed.year,
-            season=parsed.season, source_name=parsed.source_name,
-        )
+        _require(hash_)
         try:
-            found = pipeline.tmdb.search(manual, item.kind or "movie")
+            found = pipeline.search(hash_, q)
         except TmdbUnavailable as exc:
             raise HTTPException(status_code=503, detail=f"TMDB unavailable: {exc}") from exc
-        store.set_candidates(hash_, found)
         return SearchOut(candidates=[CandidateOut(**_candidate_fields(c)) for c in found])
 
     return router

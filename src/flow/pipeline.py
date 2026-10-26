@@ -11,6 +11,7 @@ from __future__ import annotations
 import functools
 import logging
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 from .config import Config
@@ -18,7 +19,7 @@ from .db import Store
 from .decide import decide
 from .layout import plan_links
 from .linker import LinkConflict, execute_links, prune_empty_dirs
-from .models import Identification
+from .models import Candidate, Identification
 from .naming import parse_release_name
 from .pathmap import to_host_path
 from .qbit import QbitUnavailable
@@ -74,6 +75,8 @@ class Pipeline:
                 item = self.store.get(torrent.hash)
                 if item is not None and item.state in _SETTLED:
                     continue
+                if item is not None and item.state == "needs_you" and not item.retry:
+                    continue  # waiting for a human; re-asking TMDB changes nothing
                 try:
                     self.process(torrent.hash)
                 except Exception as exc:
@@ -84,6 +87,7 @@ class Pipeline:
                         torrent.hash,
                         "needs_you",
                         reason=f"unexpected error: {type(exc).__name__}: {exc}",
+                        retry=True,
                     )
 
     @_serialized
@@ -100,7 +104,7 @@ class Pipeline:
                 item.content_path, self.cfg.container_downloads_prefix, self.cfg.downloads_root
             )
         except ValueError as exc:
-            self.store.set_state(hash_, "needs_you", reason=str(exc))
+            self.store.set_state(hash_, "needs_you", reason=str(exc), retry=True)
             return
 
         content = scan_content(source, self.cfg.media)
@@ -118,7 +122,7 @@ class Pipeline:
             kind = content.kind if content.kind != "unknown" else "movie"
             candidates = self.tmdb.search(parsed, kind)
         except TmdbUnavailable as exc:
-            self.store.set_state(hash_, "needs_you", reason=f"TMDB unavailable: {exc}")
+            self.store.set_state(hash_, "needs_you", reason=f"TMDB unavailable: {exc}", retry=True)
             return
 
         self.store.set_candidates(hash_, candidates)
@@ -145,12 +149,23 @@ class Pipeline:
                 item.content_path, self.cfg.container_downloads_prefix, self.cfg.downloads_root
             )
         except ValueError as exc:
-            self.store.set_state(hash_, "needs_you", reason=str(exc))
+            self.store.set_state(hash_, "needs_you", reason=str(exc), retry=True)
             return
 
         self._link_chosen(hash_, scan_content(source, self.cfg.media), tmdb_id)
 
     @_serialized
+    @_serialized
+    def search(self, hash_: str, query: str) -> list[Candidate]:
+        """A human's manual TMDB search; its results replace the candidates."""
+        item = self.store.get(hash_)
+        if item is None:
+            return []
+        parsed = replace(parse_release_name(item.name), title_en=query, title_zh=None)
+        found = self.tmdb.search(parsed, item.kind or "movie")
+        self.store.set_candidates(hash_, found)
+        return found
+
     def ignore(self, hash_: str) -> None:
         self.store.set_state(hash_, "ignored", reason="marked not media")
 
@@ -181,7 +196,9 @@ class Pipeline:
             try:
                 candidate = self.tmdb.get(tmdb_id, kind)
             except TmdbUnavailable as exc:
-                self.store.set_state(hash_, "needs_you", reason=f"TMDB unavailable: {exc}")
+                self.store.set_state(
+                    hash_, "needs_you", reason=f"TMDB unavailable: {exc}", retry=True
+                )
                 return
 
         if candidate is None:
@@ -199,7 +216,9 @@ class Pipeline:
         try:
             execute_links(links, self.cfg.staging_root)
         except LinkConflict as exc:
-            self.store.set_state(hash_, "needs_you", reason=f"destination conflict: {exc}")
+            self.store.set_state(
+                hash_, "needs_you", reason=f"destination conflict: {exc}", retry=True
+            )
             return
 
         self.store.set_linked(hash_, str(_title_root(links, self.cfg.staging_root)))

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from .test_pipeline import cand
-from .test_web_api import api, seed_needs_you  # noqa: F401  (api is a fixture)
+from .test_web_api import seed_needs_you
 
 STATIC = Path(__file__).resolve().parents[1] / "src/flow/web/static"
 MODULES = ("api.js", "board.js", "resolve.js", "dom.js")

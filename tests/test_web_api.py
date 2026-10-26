@@ -1,36 +1,10 @@
-import pytest
-from fastapi.testclient import TestClient
-
-from flow.config import Config
-from flow.db import Store
-from flow.models import Candidate
-from flow.pipeline import Pipeline
 from flow.qbit import Torrent
-from flow.web.app import create_app
 
-from .test_pipeline import FakeQbit, FakeTmdb, cand, make_junk, make_movie
+from .test_pipeline import cand, make_junk, make_movie
 
 LONGMEN = "龙门飞甲.2011.HKG.1080p.国粤双语.简繁中字￡CMCT星辰"
 PEGASUS = "飞驰人生.Pegasus.2019.BluRay.1080p.x265.10bit.MNHD-FRDS"
 JUNK = "CE教学实例应用-由浅入深学习游戏修改 [全十课]"
-
-
-@pytest.fixture
-def api(tmp_path):
-    downloads = tmp_path / "downloads"
-    staging = tmp_path / "staging"
-    downloads.mkdir()
-    staging.mkdir()
-    cfg = Config(
-        downloads_root=downloads, staging_root=staging, db_path=tmp_path / "flow.db",
-        qb_url="http://qb", qb_username="u", qb_password="super-secret", tmdb_api_key="key-123",
-    )
-    store = Store(cfg.db_path)
-    qbit = FakeQbit()
-    tmdb = FakeTmdb()
-    pipeline = Pipeline(cfg, store, qbit, tmdb)
-    client = TestClient(create_app(pipeline, store, cfg))
-    return client, pipeline, store, qbit, tmdb, downloads, staging
 
 
 def seed_needs_you(api) -> Torrent:
@@ -130,3 +104,22 @@ def test_board_item_carries_its_release_name(api):
     client = api[0]
     t = seed_needs_you(api)
     assert client.get("/api/board").json()["needs_you"][0]["name"] == t.name
+
+
+def test_resolve_refuses_an_item_that_is_not_waiting_for_you(api):
+    client, pipeline, store, qbit, tmdb, downloads, staging = api
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    pipeline.poll_once()
+    assert store.get(t.hash).state == "ready"
+    assert client.post(f"/api/items/{t.hash}/resolve", json={"tmdb_id": 1}).status_code == 409
+
+
+def test_manual_search_survives_the_next_poll(api):
+    client, pipeline, store, qbit, tmdb, downloads, staging = api
+    t = seed_needs_you(api)
+    tmdb.results["Dragon Inn"] = [cand(5, "龙门客栈", "Dragon Inn", 1967, 0.5)]
+    client.get(f"/api/items/{t.hash}/search", params={"q": "Dragon Inn"})
+    pipeline.poll_once()
+    assert client.get(f"/api/items/{t.hash}/preview", params={"tmdb_id": 5}).status_code == 200

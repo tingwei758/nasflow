@@ -141,3 +141,31 @@ def test_store_survives_concurrent_use_from_several_threads(tmp_path):
         t.join()
     assert errors == []
     assert len(s.all_items()) == 40
+
+
+def test_retry_flag_round_trips(tmp_path):
+    s = store(tmp_path)
+    s.upsert_discovered(torrent())
+    s.set_state("h1", "needs_you", reason="TMDB unavailable", retry=True)
+    assert s.get("h1").retry is True
+    s.set_state("h1", "needs_you", reason="2 close matches")
+    assert s.get("h1").retry is False
+
+
+def test_opens_a_database_created_before_the_retry_column(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE items (hash TEXT PRIMARY KEY, name TEXT NOT NULL,
+           content_path TEXT NOT NULL, state TEXT NOT NULL, kind TEXT,
+           reason TEXT NOT NULL DEFAULT '', candidates_json TEXT NOT NULL DEFAULT '[]',
+           chosen_tmdb_id INTEGER, dest_root TEXT, discovered_at REAL NOT NULL,
+           updated_at REAL NOT NULL)"""
+    )
+    conn.execute("INSERT INTO items (hash, name, content_path, state, discovered_at, updated_at)"
+                 " VALUES ('h1', 'n', '/downloads/n', 'needs_you', 0, 0)")
+    conn.commit()
+    conn.close()
+    assert Store(path).get("h1").retry is False

@@ -34,9 +34,15 @@ CREATE TABLE IF NOT EXISTS items (
     chosen_tmdb_id  INTEGER,
     dest_root       TEXT,
     discovered_at   REAL NOT NULL,
-    updated_at      REAL NOT NULL
+    updated_at      REAL NOT NULL,
+    retry           INTEGER NOT NULL DEFAULT 0
 );
 """
+
+# Columns added after the first release, applied to existing databases on open.
+_MIGRATIONS = {
+    "retry": "ALTER TABLE items ADD COLUMN retry INTEGER NOT NULL DEFAULT 0",
+}
 
 
 def _locked(method):
@@ -63,6 +69,9 @@ class Item:
     dest_root: str | None
     discovered_at: float
     updated_at: float
+    # A stop that can clear by itself (TMDB down, destination occupied) and is
+    # retried by the next poll. Judgement stops wait for the human.
+    retry: bool = False
 
 
 class Store:
@@ -74,6 +83,10 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
+        present = {row["name"] for row in self._conn.execute("PRAGMA table_info(items)")}
+        for column, statement in _MIGRATIONS.items():
+            if column not in present:
+                self._conn.execute(statement)
         self._conn.commit()
 
     @_locked
@@ -98,13 +111,15 @@ class Store:
             )
 
     @_locked
-    def set_state(self, hash_: str, state: str, reason: str | None = None) -> None:
+    def set_state(
+        self, hash_: str, state: str, reason: str | None = None, retry: bool = False
+    ) -> None:
         if state not in STATES:
             raise ValueError(f"unknown state {state!r}")
         with self._conn:
             self._conn.execute(
-                "UPDATE items SET state = ?, reason = ?, updated_at = ? WHERE hash = ?",
-                (state, reason or "", time.time(), hash_),
+                "UPDATE items SET state = ?, reason = ?, retry = ?, updated_at = ? WHERE hash = ?",
+                (state, reason or "", int(retry), time.time(), hash_),
             )
 
     @_locked
@@ -184,4 +199,5 @@ def _to_item(row: sqlite3.Row) -> Item:
         dest_root=row["dest_root"],
         discovered_at=row["discovered_at"],
         updated_at=row["updated_at"],
+        retry=bool(row["retry"]),
     )

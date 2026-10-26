@@ -407,3 +407,67 @@ def test_one_item_crashing_does_not_block_the_rest_of_the_poll(env, monkeypatch)
     assert store.get(bad.hash).state == "needs_you"
     assert "unexpected error" in store.get(bad.hash).reason
     assert store.get(good.hash).state == "ready"
+
+
+# ---- review: only stops that can clear by themselves are retried -------------
+
+
+def test_judgement_stop_is_not_reprocessed_every_poll(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, LONGMEN)
+    qbit.torrents = [t]
+    tmdb.results = {"龙门飞甲": [cand(3, "龙门飞甲", "Dragon Gate", 2011, 0.94)]}
+    calls = []
+    real = tmdb.search
+    tmdb.search = lambda parsed, kind: calls.append(1) or real(parsed, kind)
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    p.poll_once()
+    p.poll_once()
+    assert len(calls) == 1 and store.get(t.hash).state == "needs_you"
+
+
+def test_tmdb_outage_is_retried_by_the_next_poll(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    tmdb.fail = True
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    assert store.get(t.hash).state == "needs_you"
+    tmdb.restore()
+    p.poll_once()
+    assert store.get(t.hash).state == "ready"
+
+
+def test_destination_conflict_is_retried_once_the_old_folder_is_gone(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    blocker = staging / "Movies/飞驰人生 (2019)/飞驰人生 (2019).mkv"
+    blocker.parent.mkdir(parents=True)
+    blocker.write_bytes(b"older release, not yet moved")
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    assert store.get(t.hash).state == "needs_you"
+    blocker.unlink()  # the human moved the older version to the library
+    p.poll_once()
+    assert store.get(t.hash).state == "ready"
+
+
+def test_manual_search_replaces_candidates_under_the_pipeline(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, LONGMEN)
+    qbit.torrents = [t]
+    tmdb.results = {
+        "龙门飞甲": [cand(3, "龙门飞甲", "Dragon Gate", 2011, 0.94)],
+        "Dragon Inn": [cand(5, "龙门客栈", "Dragon Inn", 1967, 0.5)],
+    }
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    found = p.search(t.hash, "Dragon Inn")
+    assert [c.tmdb_id for c in found] == [5]
+    p.poll_once()
+    assert [c.tmdb_id for c in store.get_candidates(t.hash)] == [5]
