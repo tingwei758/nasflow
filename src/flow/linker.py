@@ -1,11 +1,14 @@
 """The only module in flow that creates anything on disk.
 
-Two rules it must never break:
+Three rules it must never break:
 
 1. **Hardlinks only.** `os.link`, never a copy. A copy would silently consume
    another full-size allocation and take minutes instead of milliseconds.
 2. **The source is read-only.** The files qBittorrent is seeding are never
    renamed, moved, modified, or deleted — only given a second name.
+3. **Nothing is created outside the staging root.** Hardlinks cannot cross
+   bind mounts, so downloads and staging share one read-write mount and the
+   kernel no longer protects downloads. This module is that protection.
 
 A batch is all-or-nothing: if any link conflicts, the links this call already
 made are removed, so a half-filed season never reaches the board as "ready".
@@ -28,6 +31,18 @@ class LinkConflict(RuntimeError):
         self.reason = reason
 
 
+class OutsideStaging(LinkConflict):
+    """A planned destination resolves outside the staging root. Never linked."""
+
+
+def _check_confined(dest: Path, staging_root: Path) -> None:
+    # realpath, not a lexical check: `..` and symlinks inside staging both resolve.
+    root = os.path.realpath(staging_root)
+    target = os.path.realpath(dest)
+    if target == root or os.path.commonpath([root, target]) != root:
+        raise OutsideStaging(dest, f"resolves outside the staging root {staging_root}")
+
+
 def _same_file(a: Path, b: Path) -> bool:
     try:
         return a.stat().st_ino == b.stat().st_ino and a.stat().st_dev == b.stat().st_dev
@@ -35,14 +50,18 @@ def _same_file(a: Path, b: Path) -> bool:
         return False
 
 
-def execute_links(links: list[PlannedLink]) -> None:
+def execute_links(links: list[PlannedLink], staging_root: Path) -> None:
     """Create every link, or none of them.
 
-    An existing destination that is already a hardlink to the same source is a
-    no-op success, which makes re-processing a torrent safe. An existing
-    destination that is a different file raises `LinkConflict` — flow never
-    overwrites.
+    Every destination is confined to `staging_root` before anything is
+    created. An existing destination that is already a hardlink to the same
+    source is a no-op success, which makes re-processing a torrent safe. An
+    existing destination that is a different file raises `LinkConflict` — flow
+    never overwrites.
     """
+    for link in links:
+        _check_confined(link.dest, staging_root)
+
     created: list[Path] = []
     try:
         for link in links:

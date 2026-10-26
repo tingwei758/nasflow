@@ -162,7 +162,7 @@ class Pipeline:
             return
 
         try:
-            execute_links(links)
+            execute_links(links, self.cfg.staging_root)
         except LinkConflict as exc:
             self.store.set_state(hash_, "needs_you", reason=f"destination conflict: {exc}")
             return
