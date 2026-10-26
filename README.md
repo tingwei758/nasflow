@@ -17,7 +17,7 @@ the originals, which flow never renames, moves, or modifies.
 
 ## The board
 
-Open `http://<FLOW_LAN_IP>:<FLOW_PORT>` (e.g. `http://192.168.4.126:8080`).
+Open `http://<FLOW_LAN_IP>:<FLOW_PORT>` (e.g. `http://192.168.4.126:9987`).
 
 | Column | Meaning |
 |---|---|

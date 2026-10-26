@@ -39,7 +39,7 @@ poll_interval_s = 60
 # best match scores below score_accept, or beats the runner-up by less than
 # score_gap.
 score_accept = 0.80
-score_gap = 0.15
+score_gap = 0.10
 
 # Chinese-only release names have no English title to cross-check, so they stop
 # for confirmation even when the score is high. Set false to trust the score.
@@ -48,9 +48,9 @@ require_english_title = true
 # Inside the container flow listens on all interfaces; docker-compose.yml
 # publishes it on FLOW_LAN_IP only. Do NOT expose it to the internet — flow
 # has no authentication by design. Keep bind_port in step with the container
-# side of the compose port mapping (8080).
+# side of the compose port mapping (9987).
 bind_host = "0.0.0.0"
-bind_port = 8080
+bind_port = 9987
 
 [layout]
 # Defaults match the existing library convention. Templates use str.format.

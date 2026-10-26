@@ -61,10 +61,10 @@ class Config:
     tmdb_image_base: str = "https://image.tmdb.org/t/p/w154"
     poll_interval_s: int = 60
     score_accept: float = 0.80
-    score_gap: float = 0.15
+    score_gap: float = 0.10
     require_english_title: bool = True
     bind_host: str = "0.0.0.0"
-    bind_port: int = 8080
+    bind_port: int = 9987
     layout: LayoutConfig = LayoutConfig()
     media: MediaConfig = MediaConfig()
 

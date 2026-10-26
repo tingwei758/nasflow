@@ -147,3 +147,12 @@ def test_the_guard_actually_catches_a_violation():
 def test_the_guard_ignores_docstrings_and_comments():
     documented = '"""Maps /downloads onto the host."""\n# also /volume1 here\nX = 1\n'
     assert _code_string_literals(documented) == []
+
+
+def test_defaults_tuned_from_the_real_nas_dry_run():
+    """0.10: on the 252 real downloads every top pick 0.10-0.14 ahead was right."""
+    from flow.config import Config as C
+    defaults = C(downloads_root=Path("/d"), staging_root=Path("/s"), db_path=Path("/db"),
+                 qb_url="x", qb_username="u", qb_password="p", tmdb_api_key="k")
+    assert defaults.score_gap == 0.10
+    assert defaults.bind_port == 9987

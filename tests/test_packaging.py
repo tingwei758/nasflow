@@ -78,3 +78,9 @@ def test_secrets_never_enter_the_image():
 def test_env_example_has_no_secrets():
     env = _env()
     assert not any("KEY" in k or "PASSWORD" in k for k in env if env[k] not in ("", "change-me"))
+
+
+def test_published_port_matches_the_config_port():
+    cfg = tomllib.loads((ROOT / "config.example.toml").read_text(encoding="utf-8"))
+    container_port = re.search(r'\$\{FLOW_PORT[^}]*\}:(\d+)"', COMPOSE).group(1)
+    assert int(container_port) == cfg["bind_port"] == int(_env()["FLOW_PORT"])

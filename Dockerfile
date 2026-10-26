@@ -9,5 +9,5 @@ COPY src ./src
 RUN pip install --no-cache-dir . && rm -rf /app/src
 
 VOLUME /config
-EXPOSE 8080
+EXPOSE 9987
 ENTRYPOINT ["python", "-m", "flow.main"]
