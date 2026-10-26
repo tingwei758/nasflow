@@ -10,6 +10,7 @@ from ..layout import plan_links
 from ..models import Identification
 from ..naming import parse_release_name
 from ..pathmap import to_host_path
+from ..pipeline import NotWaiting
 from ..scan import scan_content
 from ..tmdb import TmdbUnavailable
 from .schemas import (
@@ -97,20 +98,20 @@ def build_router(pipeline, store, cfg) -> APIRouter:
 
     @router.post("/api/items/{hash_}/resolve")
     def resolve(hash_: str, body: ResolveIn) -> dict[str, str]:
-        item = _require(hash_)
-        if item.state != "needs_you":
-            # Re-filing a ready item would make a second folder and lose track
-            # of the first one.
-            raise HTTPException(
-                status_code=409, detail=f"item is {item.state}, not waiting for you"
-            )
-        pipeline.resolve(hash_, body.tmdb_id)
+        _require(hash_)
+        try:
+            pipeline.resolve(hash_, body.tmdb_id)
+        except NotWaiting as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
         return {"state": store.get(hash_).state}
 
     @router.post("/api/items/{hash_}/ignore")
     def ignore(hash_: str) -> dict[str, str]:
         _require(hash_)
-        pipeline.ignore(hash_)
+        try:
+            pipeline.ignore(hash_)
+        except NotWaiting as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
         return {"state": store.get(hash_).state}
 
     @router.get("/api/items/{hash_}/preview")

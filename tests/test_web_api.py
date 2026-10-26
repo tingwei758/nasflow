@@ -123,3 +123,11 @@ def test_manual_search_survives_the_next_poll(api):
     client.get(f"/api/items/{t.hash}/search", params={"q": "Dragon Inn"})
     pipeline.poll_once()
     assert client.get(f"/api/items/{t.hash}/preview", params={"tmdb_id": 5}).status_code == 200
+
+
+def test_ignore_refuses_an_item_that_is_not_waiting_for_you(api):
+    client, pipeline, store, qbit, tmdb, downloads, staging = api
+    t = seed_needs_you(api)
+    client.post(f"/api/items/{t.hash}/resolve", json={"tmdb_id": 72113})
+    assert client.post(f"/api/items/{t.hash}/ignore").status_code == 409
+    assert store.get(t.hash).state == "ready"

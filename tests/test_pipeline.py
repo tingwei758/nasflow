@@ -1,4 +1,5 @@
 import shutil
+import threading
 from dataclasses import replace
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pytest
 from nasflow.config import Config
 from nasflow.db import Store
 from nasflow.models import Candidate
-from nasflow.pipeline import Pipeline
+from nasflow.pipeline import NotWaiting, Pipeline
 from nasflow.qbit import QbitUnavailable, Torrent
 from nasflow.tmdb import TmdbUnavailable
 
@@ -355,8 +356,6 @@ def test_moving_only_the_season_folder_still_reaches_done(env):
 
 def test_human_resolve_is_not_overwritten_by_a_concurrent_poll(env):
     """A poll mid-way through an item must not clobber a choice made meanwhile."""
-    import threading
-
     cfg, store, qbit, tmdb, downloads, staging = env
     t = make_movie(downloads, LONGMEN)
     qbit.torrents = [t]
@@ -471,3 +470,80 @@ def test_manual_search_replaces_candidates_under_the_pipeline(env):
     assert [c.tmdb_id for c in found] == [5]
     p.poll_once()
     assert [c.tmdb_id for c in store.get_candidates(t.hash)] == [5]
+
+
+# ---- review 2: human actions re-check the state under the pipeline lock -----
+
+def _retryable_stop_then_slow_poll(env):
+    """An item stopped for a TMDB outage, and a poll now re-processing it slowly."""
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    tmdb.fail = True
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    assert store.get(t.hash).state == "needs_you"
+    tmdb.restore()
+
+    entered, release = threading.Event(), threading.Event()
+    real_search = tmdb.search
+
+    def slow_search(parsed, kind):
+        entered.set()
+        release.wait(5)
+        return real_search(parsed, kind)
+
+    tmdb.search = slow_search
+    poller = threading.Thread(target=p.poll_once)
+    poller.start()
+    assert entered.wait(5)
+    return p, t, poller, release
+
+
+def _run_blocked(action, release, poller):
+    errors = []
+
+    def call():
+        try:
+            action()
+        except Exception as exc:  # collected for the assertion
+            errors.append(exc)
+
+    worker = threading.Thread(target=call)
+    worker.start()
+    worker.join(0.3)
+    blocked = worker.is_alive()
+    release.set()
+    poller.join(5)
+    worker.join(5)
+    return blocked, errors
+
+
+def test_ignore_waits_for_an_in_flight_poll(env):
+    cfg, store, *_ , staging = env
+    p, t, poller, release = _retryable_stop_then_slow_poll(env)
+    blocked, errors = _run_blocked(lambda: p.ignore(t.hash), release, poller)
+    assert blocked, "ignore must not change the item while a poll is filing it"
+    # The poll filed it first; ignoring a filed item is refused, not half-applied.
+    assert store.get(t.hash).state == "ready"
+    assert [type(e) for e in errors] == [NotWaiting]
+
+
+def test_resolve_after_the_poll_filed_it_is_refused_not_filed_twice(env):
+    cfg, store, *_ , staging = env
+    p, t, poller, release = _retryable_stop_then_slow_poll(env)
+    _, errors = _run_blocked(lambda: p.resolve(t.hash, 1), release, poller)
+    assert [type(e) for e in errors] == [NotWaiting]
+    assert store.get(t.hash).chosen_tmdb_id is None
+    assert len(list((staging / "Movies").iterdir())) == 1
+
+
+def test_ignore_of_a_waiting_item_still_works(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, LONGMEN)
+    qbit.torrents = [t]
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    p.ignore(t.hash)
+    assert store.get(t.hash).state == "ignored"

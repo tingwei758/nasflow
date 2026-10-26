@@ -32,6 +32,10 @@ log = logging.getLogger(__name__)
 _SETTLED = frozenset({"ready", "done", "ignored"})
 
 
+class NotWaiting(Exception):
+    """A human acted on an item that is no longer waiting for them."""
+
+
 def _serialized(method):
     """One item-changing operation at a time.
 
@@ -142,6 +146,7 @@ class Pipeline:
         item = self.store.get(hash_)
         if item is None:
             return
+        self._require_waiting(item)
         self.store.set_resolution(hash_, tmdb_id)
 
         try:
@@ -155,7 +160,6 @@ class Pipeline:
         self._link_chosen(hash_, scan_content(source, self.cfg.media), tmdb_id)
 
     @_serialized
-    @_serialized
     def search(self, hash_: str, query: str) -> list[Candidate]:
         """A human's manual TMDB search; its results replace the candidates."""
         item = self.store.get(hash_)
@@ -166,8 +170,21 @@ class Pipeline:
         self.store.set_candidates(hash_, found)
         return found
 
+    @_serialized
     def ignore(self, hash_: str) -> None:
+        item = self.store.get(hash_)
+        if item is None:
+            return
+        self._require_waiting(item)
         self.store.set_state(hash_, "ignored", reason="marked not media")
+
+    @staticmethod
+    def _require_waiting(item) -> None:
+        # Checked under the lock: the board saw the card before a poll may have
+        # filed it, and acting on a filed item would make a second folder
+        # (resolve) or leave an untracked one in staging (ignore).
+        if item.state != "needs_you":
+            raise NotWaiting(f"item is {item.state}, not waiting for you")
 
     # ---- staging reconciliation -----------------------------------------
 
