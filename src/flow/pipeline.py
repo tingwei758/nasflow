@@ -9,7 +9,6 @@ down, a destination being occupied, a torrent vanishing mid-poll.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from .config import Config
@@ -129,10 +128,12 @@ class Pipeline:
         Watching staging for *disappearance* is safe, unlike watching downloads
         for appearance: a folder only leaves staging because a human moved it.
         """
+        # Prune first: moving only a season folder leaves its show folder empty,
+        # and the show folder is what `dest_root` records.
+        prune_empty_dirs(self.cfg.staging_root)
         for item in self.store.items_in(["ready"]):
             if item.dest_root and not Path(item.dest_root).exists():
                 self.store.set_state(item.hash, "done", reason="moved to the library")
-        prune_empty_dirs(self.cfg.staging_root)
 
     # ---- internals -------------------------------------------------------
 
@@ -166,9 +167,14 @@ class Pipeline:
             self.store.set_state(hash_, "needs_you", reason=f"destination conflict: {exc}")
             return
 
-        self.store.set_linked(hash_, str(_common_root(links)))
+        self.store.set_linked(hash_, str(_title_root(links, self.cfg.staging_root)))
 
 
-def _common_root(links) -> Path:
-    """The folder a human will move: the show or movie directory, not a season."""
-    return Path(os.path.commonpath([str(link.dest.parent) for link in links]))
+def _title_root(links, staging_root: Path) -> Path:
+    """The folder a human will move: the show or movie directory, not a season.
+
+    Every layout is `<kind dir>/<title dir>/...` under the staging root, so the
+    title folder is the first two components of any planned destination.
+    """
+    relative = links[0].dest.relative_to(staging_root)
+    return staging_root / relative.parts[0] / relative.parts[1]

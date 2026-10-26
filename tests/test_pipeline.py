@@ -321,3 +321,33 @@ def test_candidates_are_stored_for_the_resolve_panel(env):
     tmdb.results = {"龙门飞甲": [cand(3, "龙门飞甲", "Dragon Gate", 2011, 0.94)]}
     build(cfg, store, qbit, tmdb).poll_once()
     assert [c.tmdb_id for c in store.get_candidates(t.hash)] == [3]
+
+
+def test_tv_dest_root_is_the_show_folder_not_the_season(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_season(downloads, BM_S06)
+    qbit.torrents = [t]
+    tmdb.results = {"Black Mirror": [cand(2, "黑镜", "Black Mirror", 2011, 0.96, "tv")]}
+    build(cfg, store, qbit, tmdb).poll_once()
+    assert store.get(t.hash).dest_root == str(staging / "TV Shows/黑镜 (2011)")
+
+
+def test_movie_dest_root_is_the_movie_folder(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, PEGASUS)
+    qbit.torrents = [t]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    build(cfg, store, qbit, tmdb).poll_once()
+    assert store.get(t.hash).dest_root == str(staging / "Movies/飞驰人生 (2019)")
+
+
+def test_moving_only_the_season_folder_still_reaches_done(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_season(downloads, BM_S06)
+    qbit.torrents = [t]
+    tmdb.results = {"Black Mirror": [cand(2, "黑镜", "Black Mirror", 2011, 0.96, "tv")]}
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()
+    shutil.rmtree(staging / "TV Shows/黑镜 (2011)/Season 6")
+    p.reconcile_staging()
+    assert store.get(t.hash).state == "done"
