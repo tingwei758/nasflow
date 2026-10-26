@@ -62,6 +62,9 @@ class Config:
     poll_interval_s: int = 60
     score_accept: float = 0.80
     score_gap: float = 0.10
+    # Minimum title similarity on its own: an exact year plus a ~0.69 title
+    # would otherwise reach score_accept.
+    title_accept: float = 0.75
     require_english_title: bool = True
     bind_host: str = "0.0.0.0"
     bind_port: int = 9987

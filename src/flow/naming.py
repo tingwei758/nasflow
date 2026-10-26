@@ -42,8 +42,9 @@ _ZH_NUMERALS = {c: i for i, c in enumerate("一二三四五六七八九十", sta
 
 # Pinyin or English glued straight onto the Chinese title (长安三万里Chang.an...):
 # the Chinese title is the CJK run; the Latin rest belongs to the remainder.
-# A season tag (S04) is not split off this way; it is read above.
-_ZH_GLUED_LATIN_RE = re.compile(f"^([{_CJK}]+)((?!S\\d)[A-Za-z]{{2}}.*)$")
+# Latin inside the Chinese title (脱口秀和Ta的朋友们) stays: the rest must contain
+# no CJK. A season tag (S04) is not split off this way; it is read above.
+_ZH_GLUED_LATIN_RE = re.compile(f"^([{_CJK}]+)((?!S\\d)[A-Za-z]{{2}}[^{_CJK}]*)$")
 
 # guessit reads "Part II" as a part number and drops it from the title.
 _PART_RE = re.compile(r"(?:^|[.\s_])Part[.\s_]+([IVX]+|\d+)(?=[.\s_]|$)", re.IGNORECASE)

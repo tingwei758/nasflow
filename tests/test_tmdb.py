@@ -319,3 +319,9 @@ def test_ampersand_and_the_word_and_are_the_same_title():
     raw = tv_result(86831, "Love, Death & Robots", year="2019")
     cand = score_candidate(raw, parsed(title_en="Love Death and Robots", season=4), "tv")
     assert "title exact" in cand.reason
+
+
+def test_candidate_carries_its_title_score():
+    raw = movie_result(1, "Pegasus", year="2019")
+    cand = score_candidate(raw, parsed(title_en="Pegasus", year=2019), "movie")
+    assert cand.title_score == 1.0

@@ -103,6 +103,7 @@ def score_candidate(
         poster_path=raw.get("poster_path"),
         score=score,
         reason=f"{title_reason} · {year_reason}",
+        title_score=round(title_score, 4),
     )
 
 

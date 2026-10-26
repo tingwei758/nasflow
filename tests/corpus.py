@@ -134,5 +134,11 @@ CORPUS: list[tuple[str, dict]] = [
         "一拳超人第二季.One.Punch.Man.2.2019.Complete.4K.WEB-DL.H265.AAC-OurTV",
         {"title_zh": "一拳超人", "season": 2},
     ),
+    # Latin letters INSIDE a Chinese title are part of it; only a Latin tail
+    # glued on after the Chinese is split off (regression from 长安三万里Chang).
+    (
+        "脱口秀和Ta的朋友们.Stand-Up.Comedy.and.Friends.S01.2024.1080p.WEB-DL.H264.AAC-HHWEB",
+        {"title_zh": "脱口秀和Ta的朋友们", "season": 1, "year": 2024},
+    ),
 ]
 # fmt: on

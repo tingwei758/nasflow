@@ -66,6 +66,9 @@ class Candidate:
     poster_path: str | None
     score: float
     reason: str
+    # Title similarity on its own (0-1), so decide() can refuse a match whose
+    # score rests mostly on the year. None when not measured.
+    title_score: float | None = None
 
 
 @dataclass(frozen=True)

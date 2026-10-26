@@ -128,3 +128,25 @@ def test_tv_download_with_unmarked_videos_stops_and_names_them():
     assert d.action == "stop"
     assert "1 video without an episode marker" in d.reason
     assert "Downton.Abbey.2019.1080p.mkv" in d.reason
+
+
+def _with_title(score, title_score):
+    return replace(c(score), title_score=title_score)
+
+
+def test_weak_title_evidence_stops_even_with_a_passing_score():
+    """Review: exact year + ~0.69 title similarity alone reaches 0.80."""
+    d = decide(movie_content, parsed_pegasus, [_with_title(0.81, 0.70)], CFG)
+    assert d.action == "stop" and "title" in d.reason
+
+
+def test_title_floor_is_configurable():
+    lax = replace(CFG, title_accept=0.50)
+    assert decide(movie_content, parsed_pegasus, [_with_title(0.81, 0.70)], lax).action == "link"
+
+
+def test_candidate_without_a_year_stops():
+    """Otherwise the folder would be named 'Title (None)'."""
+    yearless = replace(c(0.90), year=None)
+    d = decide(movie_content, parsed_pegasus, [yearless], CFG)
+    assert d.action == "stop" and "no release year" in d.reason

@@ -70,6 +70,15 @@ def decide(
                 f"({top.title_en} vs {ranked[1].title_en})"
             )
 
+    if top.title_score is not None and round(top.title_score, _PRECISION) < cfg.title_accept:
+        return _stop(
+            f"title only loosely matches {top.title_en} ({top.title_score:.2f}); "
+            "the score rests on the year"
+        )
+
+    if top.year is None:
+        return _stop(f"TMDB has no release year for {top.title_en}, so the folder can't be named")
+
     if cfg.require_english_title and parsed.title_en is None:
         # Confident, but there is nothing to cross-check the match against:
         # the release name carried no Latin-script title at all.

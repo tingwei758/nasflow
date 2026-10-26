@@ -40,6 +40,8 @@ poll_interval_s = 60
 # score_gap.
 score_accept = 0.80
 score_gap = 0.10
+# ...and the title alone must be at least this similar.
+title_accept = 0.75
 
 # Chinese-only release names have no English title to cross-check, so they stop
 # for confirmation even when the score is high. Set false to trust the score.
