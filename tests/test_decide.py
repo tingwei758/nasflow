@@ -102,3 +102,15 @@ def test_tv_content_links_like_movies():
         subtitles=[], reason="",
     )
     assert decide(tv, ParsedName("Black Mirror", "黑镜", 2011, 6, "x"), [c(0.95)], CFG).action == "link"
+
+
+def test_gap_exactly_at_threshold_links_despite_float_error():
+    """1.00 - 0.90 is 0.0999... in floating point; a 0.10 gap must still pass."""
+    at_threshold = replace(CFG, score_gap=0.10)
+    d = decide(movie_content, parsed_pegasus, [c(1.00), c(0.90, 2)], at_threshold)
+    assert d.action == "link"
+
+
+def test_score_exactly_at_accept_links_despite_float_error():
+    assert 0.7 + 0.1 < 0.80  # the trap: 0.7999999999999999
+    assert decide(movie_content, parsed_pegasus, [c(0.7 + 0.1)], CFG).action == "link"

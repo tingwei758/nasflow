@@ -17,6 +17,11 @@ from .config import Config
 from .models import Candidate, Content, ParsedName
 
 
+# Scores are rounded to 4 places when computed; compare at the same precision,
+# or 1.00 - 0.90 (= 0.0999...) fails a 0.10 gap and boundaries turn arbitrary.
+_PRECISION = 4
+
+
 @dataclass(frozen=True)
 class Decision:
     action: Literal["link", "stop"]
@@ -44,12 +49,12 @@ def decide(
     ranked = sorted(candidates, key=lambda c: c.score, reverse=True)
     top = ranked[0]
 
-    if top.score < cfg.score_accept:
+    if round(top.score, _PRECISION) < round(cfg.score_accept, _PRECISION):
         return _stop(f"best match only scored {top.score:.2f}")
 
     if len(ranked) > 1:
-        gap = top.score - ranked[1].score
-        if gap < cfg.score_gap:
+        gap = round(top.score - ranked[1].score, _PRECISION)
+        if gap < round(cfg.score_gap, _PRECISION):
             return _stop(
                 f"ambiguous: top two matches are {gap:.2f} apart "
                 f"({top.title_en} vs {ranked[1].title_en})"
