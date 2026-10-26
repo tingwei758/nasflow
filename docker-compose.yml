@@ -17,8 +17,8 @@ services:
       # fail with EXDEV. nasflow's own code confines writes to staging_root.
       # The media library is deliberately not mounted at all.
       - /volume1/docker/qb:/volume1/docker/qb
-      # config.toml and nasflow.db.
-      - /volume1/docker/nasflow:/config
+      # config.toml and nasflow.db, in the data/ folder next to this file.
+      - /volume1/docker/nasflow/data:/config
     ports:
       # LAN only: nasflow has no authentication by design. The NAS's LAN
       # address, the port to open the board on, and config.toml's bind_port.

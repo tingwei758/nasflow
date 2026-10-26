@@ -71,23 +71,34 @@ library is up for replacement.
 
 ## Install (Synology Container Manager)
 
-1. **Copy this repository** to the NAS, e.g. `/volume1/docker/nasflow-src`.
-2. **Create the config folder** and the staging folder:
-   - `/volume1/docker/nasflow`, for `config.toml` and `nasflow.db`
-   - `/volume1/docker/qb/staging`
+Everything lives in one folder, `/volume1/docker/nasflow`: the code at its top,
+and your settings and database in its `data/` subfolder.
 
-   Both must be writable by UID/GID `911`, the owner of qBittorrent's files.
-3. **Check `docker-compose.yml`.** It holds the few values Docker needs before
-   nasflow starts: the shared qB folder, the config folder, the NAS's LAN
-   address and port, and the user (`911:911`). Edit them in place if yours
-   differ.
-4. **Create `/volume1/docker/nasflow/config.toml`** from `config.example.toml`. Fill in:
+```
+/volume1/docker/nasflow/
+├── docker-compose.yml, Dockerfile, src/, …   code: replace it to update
+└── data/
+    ├── config.toml                              your settings
+    └── nasflow.db                               created on first start
+```
+
+1. **Copy this repository** to `/volume1/docker/nasflow`.
+2. **Create `data/config.toml`** from `config.example.toml`. Fill in:
    - `qb_password`: the qBittorrent WebUI password
    - `tmdb_api_key`: the same key nastool uses (`rmt_tmdbkey` under `app:` in
      `/volume1/docker/nastools/config/config.yaml`). nasflow keeps its own copy and
      does not depend on nastool at runtime.
-5. **Container Manager → Project → Create**, point it at the repository folder
+3. **Create the staging folder** `/volume1/docker/qb/staging`. It and `data/` must
+   be writable by UID/GID `911`, the owner of qBittorrent's files.
+4. **Check `docker-compose.yml`.** It holds the few values Docker needs before
+   nasflow starts: the shared qB folder, the `data/` folder, the NAS's LAN
+   address and port, and the user (`911:911`). Edit them in place if yours
+   differ.
+5. **Container Manager → Project → Create**, point it at `/volume1/docker/nasflow`
    (it picks up `docker-compose.yml`), and start it.
+
+To update, replace everything in `/volume1/docker/nasflow` **except `data/`**, then
+rebuild the project.
 
 ### Why one mount, and why it isn't read-only
 

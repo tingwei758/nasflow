@@ -14,7 +14,8 @@ venv/
 config.toml
 .env
 
-# nasflow runtime state
+# nasflow runtime state; data/ holds config.toml and nasflow.db on the NAS
+data/
 *.db
 *.sqlite3
 
