@@ -46,7 +46,11 @@ def build_app(cfg: Config, *, start_polling: bool = True) -> FastAPI:
         cfg,
         store,
         QbitClient(cfg.qb_url, cfg.qb_username, cfg.qb_password),
-        TmdbClient(cfg.tmdb_api_key, cfg.tmdb_language),
+        TmdbClient(
+            cfg.tmdb_api_key,
+            cfg.tmdb_language,
+            english_language=cfg.tmdb_english_language or None,
+        ),
     )
 
     @contextlib.asynccontextmanager

@@ -56,6 +56,8 @@ class Config:
     tmdb_api_key: str
     container_downloads_prefix: str = "/downloads"
     tmdb_language: str = "zh-CN"
+    # Second search pass for English titles; empty string disables it.
+    tmdb_english_language: str = "en-US"
     tmdb_image_base: str = "https://image.tmdb.org/t/p/w154"
     poll_interval_s: int = 60
     score_accept: float = 0.80

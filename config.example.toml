@@ -28,6 +28,10 @@ container_downloads_prefix = "/downloads"
 
 tmdb_api_key = "change-me"
 tmdb_language = "zh-CN"
+# A second search pass in English. zh-CN results hide a film's English title
+# whenever TMDB has a Chinese translation, which let a making-of documentary
+# outscore the film itself. Set to "" to disable.
+tmdb_english_language = "en-US"
 
 poll_interval_s = 60
 

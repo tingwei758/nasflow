@@ -30,7 +30,7 @@ class TmdbUnavailable(RuntimeError):
 
 
 def _normalize(text: str) -> str:
-    folded = unicodedata.normalize("NFKC", text).casefold()
+    folded = unicodedata.normalize("NFKC", text).casefold().replace("&", " and ")
     return _WS_RE.sub(" ", _PUNCT_RE.sub(" ", folded)).strip()
 
 
@@ -45,16 +45,20 @@ def _year_of(raw: dict) -> int | None:
     return int(date[:4]) if date[:4].isdigit() else None
 
 
-def score_candidate(raw: dict, parsed: ParsedName, kind: str) -> Candidate:
+def score_candidate(
+    raw: dict, parsed: ParsedName, kind: str, english_title: str | None = None
+) -> Candidate:
     """Score one TMDB result against what the release name claimed.
 
     Title similarity is the best of every title TMDB offers (localized,
-    original, English) compared against every title the name gave us, so a
-    Chinese-only name can still match an entry found in English.
+    original, and English when an English pass supplied it) compared against
+    every title the name gave us. Without the English title, a film localized
+    as 西线无战事 with a German original title has nothing to match the release's
+    English name against, and a making-of documentary wins instead.
     """
     localized = raw.get("title") or raw.get("name") or ""
     original = raw.get("original_title") or raw.get("original_name") or ""
-    candidate_titles = [t for t in (localized, original) if t]
+    candidate_titles = [t for t in (localized, original, english_title) if t]
     parsed_titles = [t for t in (parsed.title_en, parsed.title_zh) if t]
 
     title_score = max(
@@ -62,8 +66,17 @@ def score_candidate(raw: dict, parsed: ParsedName, kind: str) -> Candidate:
     )
 
     candidate_year = _year_of(raw)
+    later_season = kind == "tv" and parsed.season is not None and parsed.season > 1
     if parsed.year is None or candidate_year is None:
         year_score, year_reason = 0.5, "year unknown"
+    elif later_season:
+        # Releases of later seasons carry either the show's premiere year
+        # (`Dark.S02.2017`) or the season's own year (`Billions.2019.S04`).
+        # Both are consistent with a show that premiered in or before it.
+        if candidate_year <= parsed.year:
+            year_score, year_reason = 1.0, f"year fits season {parsed.season}"
+        else:
+            year_score, year_reason = 0.0, "year mismatch"
     elif parsed.year == candidate_year:
         year_score, year_reason = 1.0, "year exact"
     elif abs(parsed.year - candidate_year) == 1:
@@ -84,7 +97,7 @@ def score_candidate(raw: dict, parsed: ParsedName, kind: str) -> Candidate:
         tmdb_id=int(raw["id"]),
         kind=kind,
         title_zh=_pick_chinese(localized, original),
-        title_en=localized or original,
+        title_en=english_title or localized or original,
         year=candidate_year,
         overview=raw.get("overview", "") or "",
         poster_path=raw.get("poster_path"),
@@ -106,9 +119,16 @@ def _pick_chinese(*titles: str) -> str | None:
 class TmdbClient:
     """Thin TMDB search client. Synchronous — the poll loop runs it off-thread."""
 
-    def __init__(self, api_key: str, language: str = "zh-CN", client: httpx.Client | None = None):
+    def __init__(
+        self,
+        api_key: str,
+        language: str = "zh-CN",
+        client: httpx.Client | None = None,
+        english_language: str | None = None,
+    ):
         self._api_key = api_key
         self._language = language
+        self._english_language = english_language if english_language != language else None
         self._client = client or httpx.Client(timeout=_TIMEOUT)
 
     def _describe(self, exc: Exception) -> str:
@@ -138,16 +158,42 @@ class TmdbClient:
         if not query:
             return []
 
+        endpoint = f"{_BASE}/search/{'movie' if kind == 'movie' else 'tv'}"
+        results = self._search_raw(endpoint, query, parsed, kind, self._language)
+
+        # A second pass for English titles, merged by id: localized results hide
+        # them whenever TMDB has a Chinese translation.
+        english: dict[int, str] = {}
+        if self._english_language:
+            seen = {raw["id"] for raw in results}
+            for raw in self._search_raw(endpoint, query, parsed, kind, self._english_language):
+                title = raw.get("title") or raw.get("name")
+                if title:
+                    english[raw["id"]] = title
+                if raw["id"] not in seen:
+                    results.append(raw)
+                    seen.add(raw["id"])
+
+        scored = [score_candidate(raw, parsed, kind, english.get(raw["id"])) for raw in results]
+        scored.sort(key=lambda c: c.score, reverse=True)
+        return scored
+
+    def _search_raw(
+        self, endpoint: str, query: str, parsed: ParsedName, kind: str, language: str
+    ) -> list[dict]:
         params: dict[str, object] = {
             "api_key": self._api_key,
             "query": query,
-            "language": self._language,
+            "language": language,
             "include_adult": "false",
         }
-        if parsed.year is not None:
-            params["year" if kind == "movie" else "first_air_date_year"] = parsed.year
+        # Movies only: a TV release's year is as often the season's as the
+        # show's premiere, and TMDB's first_air_date_year filter would drop the
+        # right show entirely (`Billions.2019.S04` premiered in 2016). Scoring
+        # weighs the TV year instead.
+        if parsed.year is not None and kind == "movie":
+            params["year"] = parsed.year
 
-        endpoint = f"{_BASE}/search/{'movie' if kind == 'movie' else 'tv'}"
         try:
             response = self._client.get(endpoint, params=params)
             response.raise_for_status()
@@ -155,10 +201,7 @@ class TmdbClient:
         except (httpx.HTTPError, ValueError) as exc:
             raise TmdbUnavailable(f"TMDB search failed: {self._describe(exc)}") from None
 
-        results = payload.get("results") or []
-        scored = [score_candidate(raw, parsed, kind) for raw in results if "id" in raw]
-        scored.sort(key=lambda c: c.score, reverse=True)
-        return scored
+        return [raw for raw in (payload.get("results") or []) if "id" in raw]
 
     def get(self, tmdb_id: int, kind: str) -> Candidate | None:
         """Fetch one entry by id, for when a human has chosen it explicitly."""
