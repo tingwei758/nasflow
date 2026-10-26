@@ -34,6 +34,23 @@ _ZH_PARENTHETICAL_RE = re.compile(r"[(（][^)）]*[)）]")
 _ZH_SEASON_WORD_RE = re.compile(r"\s*第[0-9一二三四五六七八九十]+[季部]\s*$")
 _ZH_SEASON_TAG_RE = re.compile(r"\s*S\d{1,2}(?:\s*-\s*S?\d{1,2})?\s*$", re.IGNORECASE)
 
+# A single season riding on the Chinese title: 冰血暴S04, 一拳超人第二季. A range
+# (黑镜S01-S05) is a pack and names no one season.
+_ZH_ONE_SEASON_TAG_RE = re.compile(r"S(\d{1,2})\s*$", re.IGNORECASE)
+_ZH_ONE_SEASON_WORD_RE = re.compile(r"第([0-9]+|[一二三四五六七八九十]+)季\s*$")
+_ZH_NUMERALS = {c: i for i, c in enumerate("一二三四五六七八九十", start=1)}
+
+# Pinyin or English glued straight onto the Chinese title (长安三万里Chang.an...):
+# the Chinese title is the CJK run; the Latin rest belongs to the remainder.
+# A season tag (S04) is not split off this way; it is read above.
+_ZH_GLUED_LATIN_RE = re.compile(f"^([{_CJK}]+)((?!S\\d)[A-Za-z]{{2}}.*)$")
+
+# guessit reads "Part II" as a part number and drops it from the title.
+_PART_RE = re.compile(r"(?:^|[.\s_])Part[.\s_]+([IVX]+|\d+)(?=[.\s_]|$)", re.IGNORECASE)
+
+# guessit occasionally reads a trailing year as a season number.
+_MAX_SEASON = 99
+
 # A year range (2011-2019) is a series' span. Keep the first year: that is the
 # series year the library folders are named for.
 _YEAR_RANGE_RE = re.compile(r"\b(19\d{2}|20\d{2})\s*-\s*(?:19\d{2}|20\d{2})\b")
@@ -75,17 +92,40 @@ def _clean_chinese_title(raw: str) -> str | None:
     return cleaned or None
 
 
-def _split_chinese_prefix(name: str) -> tuple[str | None, str]:
-    """Return (chinese_title, remainder) — remainder is the Latin-script part."""
+def _zh_season(raw: str) -> int | None:
+    """The one season a Chinese title names, if it names exactly one."""
+    cleaned = _ZH_PARENTHETICAL_RE.sub("", raw).strip(" ._-[]【】")
+    if tag := _ZH_ONE_SEASON_TAG_RE.search(cleaned):
+        if not re.search(r"S\d{1,2}\s*-\s*S?\d{1,2}\s*$", cleaned, re.IGNORECASE):
+            return int(tag.group(1))
+    if word := _ZH_ONE_SEASON_WORD_RE.search(cleaned):
+        digits = word.group(1)
+        if digits.isdigit():
+            return int(digits)
+        if len(digits) == 1:
+            return _ZH_NUMERALS.get(digits)
+    return None
+
+
+def _split_chinese_prefix(name: str) -> tuple[str | None, str, int | None]:
+    """Return (chinese_title, remainder, season named by the Chinese title).
+
+    The remainder is the Latin-script part.
+    """
     bracket = _BRACKET_PREFIX_RE.match(name)
     if bracket and _CJK_RE.search(bracket.group(1)):
-        return _clean_chinese_title(bracket.group(1)), name[bracket.end():]
+        raw = bracket.group(1)
+        return _clean_chinese_title(raw), name[bracket.end():], _zh_season(raw)
 
     head, sep, tail = name.partition(".")
     if _CJK_RE.search(head):
-        return _clean_chinese_title(head), tail if sep else ""
+        rest = tail if sep else ""
+        glued = _ZH_GLUED_LATIN_RE.match(head)
+        if glued:
+            head, rest = glued.group(1), ".".join(p for p in (glued.group(2), rest) if p)
+        return _clean_chinese_title(head), rest, _zh_season(head)
 
-    return None, name
+    return None, name, None
 
 
 def _drop_noise(remainder: str) -> str:
@@ -112,7 +152,7 @@ def parse_release_name(name: str) -> ParsedName:
     working = _strip_extension(name)
     working = _GROUP_MARKER_RE.sub("", working)
 
-    title_zh, remainder = _split_chinese_prefix(working)
+    title_zh, remainder, zh_season = _split_chinese_prefix(working)
     remainder = _YEAR_RANGE_RE.sub(r"\1", remainder)
     remainder = _drop_noise(remainder)
 
@@ -127,6 +167,8 @@ def parse_release_name(name: str) -> ParsedName:
             guess = {}
         year = _as_int(guess.get("year"))
         season = _as_int(guess.get("season"))
+        if season is not None and season > _MAX_SEASON:
+            season = None
 
         raw_title = guess.get("title")
         if not isinstance(raw_title, str) or not raw_title.strip():
@@ -136,6 +178,13 @@ def parse_release_name(name: str) -> ParsedName:
             raw_title = _leading_tokens(remainder, year, season)
         if isinstance(raw_title, str) and _LATIN_RE.search(raw_title):
             title_en = raw_title.strip() or None
+        if title_en and guess.get("part") is not None:
+            part = _PART_RE.search(remainder)
+            if part:
+                title_en = f"{title_en} Part {part.group(1).upper()}"
+
+    if season is None:
+        season = zh_season
 
     return ParsedName(
         title_en=title_en,

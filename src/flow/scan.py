@@ -22,8 +22,10 @@ from .models import Content, VideoFile
 
 # Preferred form: season and episode together.
 _SXXEXX_RE = re.compile(r"(?:^|[^A-Za-z0-9])S(\d{1,2})[._\- ]?E(\d{1,3})(?![0-9])", re.IGNORECASE)
-# Fallback for releases that number episodes without a season (E01-E05).
-_EXX_RE = re.compile(r"(?:^|[^A-Za-z0-9])E(\d{1,3})(?![0-9])", re.IGNORECASE)
+# Fallback for releases that number episodes on their own: E01-E05, EP15.
+_EXX_RE = re.compile(r"(?:^|[^A-Za-z0-9])EP?(\d{1,3})(?![0-9])", re.IGNORECASE)
+# A season tag standing apart from the episode: `...S02.2024.Chinese.EP15...`.
+_SEASON_ONLY_RE = re.compile(r"(?:^|[^A-Za-z0-9])S(\d{1,2})(?![0-9A-Za-z])", re.IGNORECASE)
 
 
 def _is_excluded(name: str, media: MediaConfig) -> bool:
@@ -94,9 +96,11 @@ def _mark_episodes(videos: list[VideoFile]) -> list[VideoFile]:
     """Attach season/episode from each file's own name.
 
     Two passes: `SxxExx` first, and only if no file in the whole content matches
-    it, fall back to a bare `Exx` with an unknown season. The fallback is
-    content-wide so that a stray `E` token in one filename cannot turn a movie
-    into a show.
+    it, fall back to a bare `Exx`/`EPxx`. The fallback is content-wide so that a
+    stray `E` token in one filename cannot turn a movie into a show. In the
+    fallback the season comes from a separate `Sxx` in the same filename when
+    there is one, and is otherwise unknown — never assumed to be 1 here, since
+    `...S02...EP15` filed as Season 1 would be silently wrong.
     """
     marked = []
     for video in videos:
@@ -115,7 +119,15 @@ def _mark_episodes(videos: list[VideoFile]) -> list[VideoFile]:
     for video in videos:
         match = _EXX_RE.search(video.path.name)
         if match:
-            fallback.append(VideoFile(video.path, video.size, None, int(match.group(1))))
+            season = _SEASON_ONLY_RE.search(video.path.name)
+            fallback.append(
+                VideoFile(
+                    video.path,
+                    video.size,
+                    int(season.group(1)) if season else None,
+                    int(match.group(1)),
+                )
+            )
         else:
             fallback.append(video)
     return fallback

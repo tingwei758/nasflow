@@ -107,5 +107,32 @@ CORPUS: list[tuple[str, dict]] = [
         "X2.2003.2160p.DSNP.WEB-DL.DDP5.1.HDR.HEVC-HHWEB",
         {"title_en": "X2", "title_zh": None, "year": 2003, "season": None},
     ),
+    # ---- found by the Task 14 dry run against the real NAS -----------------
+    # guessit read the trailing year as a season (season=2008), which made the
+    # later-season year rule reject the right show.
+    (
+        "潜伏.Lurk.E01-E30.2008.1080p.WEBrip.x265.AC3￡cXcY@FRDS",
+        {"title_en": "Lurk", "title_zh": "潜伏", "year": 2008, "season": None},
+    ),
+    # Season glued to the Chinese title: the tag was stripped, then discarded.
+    (
+        "冰血暴S04.Fargo.2020.1080p.WEB-DL.x265.10bit.AC3￡cXcY@FRDS",
+        {"title_en": "Fargo", "title_zh": "冰血暴", "year": 2020, "season": 4},
+    ),
+    # guessit treats "Part II" as a part number and drops it from the title.
+    (
+        "A.Quiet.Place.Part.II.2020.UHD.BluRay.2160p.TrueHD.Atmos.7.1.x265.10bit.HDR-BeiTai",
+        {"title_en": "A Quiet Place Part II", "year": 2020},
+    ),
+    # Chinese title glued to pinyin: only the Han run is the Chinese title.
+    (
+        "长安三万里Chang.an.san.wan.li.2023.2160p.WEB-DL.H264.DDP5.1.AAC.mkv",
+        {"title_zh": "长安三万里", "year": 2023},
+    ),
+    # 第N季 is the season when the name carries no Sxx.
+    (
+        "一拳超人第二季.One.Punch.Man.2.2019.Complete.4K.WEB-DL.H265.AAC-OurTV",
+        {"title_zh": "一拳超人", "season": 2},
+    ),
 ]
 # fmt: on

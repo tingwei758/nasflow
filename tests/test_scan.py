@@ -129,3 +129,30 @@ def test_missing_path_is_unknown_not_an_exception(tmp_path):
 def test_root_is_recorded(tmp_path):
     make_files(tmp_path, ["Movie.2020.mkv"], size=BIG)
     assert scan_content(tmp_path, MEDIA).root == tmp_path
+
+
+# ---- found by the Task 14 dry run: `EPxx` episodes with a separate `Sxx` ----
+
+def test_ep_marker_with_separate_season_marker(tmp_path):
+    """庆余年 S02 files: `...S02.2024.Chinese.EP15...` must be S2E15, not Season 1."""
+    root = tmp_path / "Joy.of.Life.S02.2024.Chinese.EP14-15.1080P.Disney.WEB-DL"
+    for ep in (14, 15):
+        make_file(root / f"庆余年.第二季.Joy.of.Life.S02.2024.Chinese.EP{ep}.1080P.Disney.WEB-DL.H265.DDP2.0-Vampire.mkv", BIG)
+    content = scan_content(root, MediaConfig())
+    assert content.kind == "tv"
+    assert sorted((v.season, v.episode) for v in content.videos) == [(2, 14), (2, 15)]
+
+
+def test_ep_marker_without_season_keeps_season_unknown(tmp_path):
+    root = tmp_path / "Show.2020"
+    make_file(root / "Show.2020.EP07.1080p.mkv", BIG)
+    make_file(root / "Show.2020.EP08.1080p.mkv", BIG)
+    content = scan_content(root, MediaConfig())
+    assert content.kind == "tv"
+    assert {(v.season, v.episode) for v in content.videos} == {(None, 7), (None, 8)}
+
+
+def test_ep_inside_a_word_is_not_an_episode(tmp_path):
+    root = tmp_path / "Deep.Blue.Sea.1999"
+    make_file(root / "Deep.Blue.Sea.1999.Sleepless.EP.Cut.1080p.mkv", BIG)
+    assert scan_content(root, MediaConfig()).kind == "movie"
