@@ -60,6 +60,9 @@ class Config:
     tmdb_english_language: str = "en-US"
     tmdb_image_base: str = "https://image.tmdb.org/t/p/w154"
     poll_interval_s: int = 60
+    # On the first successful poll, record what qBittorrent has already
+    # finished as done instead of filing it: nasflow handles new downloads.
+    skip_existing_on_first_run: bool = True
     score_accept: float = 0.80
     score_gap: float = 0.10
     # Minimum title similarity on its own: an exact year plus a ~0.69 title

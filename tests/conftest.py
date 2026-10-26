@@ -20,6 +20,8 @@ def api(tmp_path):
     cfg = Config(
         downloads_root=downloads, staging_root=staging, db_path=tmp_path / "nasflow.db",
         qb_url="http://qb", qb_username="u", qb_password="super-secret", tmdb_api_key="key-123",
+        # These fixtures test processing; the first-run baseline has its own tests.
+        skip_existing_on_first_run=False,
     )
     store = Store(cfg.db_path)
     qbit = FakeQbit()

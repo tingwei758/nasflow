@@ -29,6 +29,9 @@ from .tmdb import TmdbUnavailable
 
 log = logging.getLogger(__name__)
 
+# Set once the first successful poll has recorded what was already finished.
+_BASELINE_FLAG = "baseline_taken"
+
 # States that mean "nasflow is finished with this, leave it alone".
 _SETTLED = frozenset({"ready", "done", "ignored"})
 
@@ -68,6 +71,10 @@ class Pipeline:
             torrents = self.qbit.completed_torrents()
         except QbitUnavailable as exc:
             log.warning("qBittorrent unavailable: %s", exc)
+            return
+
+        if self.cfg.skip_existing_on_first_run and not self.store.get_flag(_BASELINE_FLAG):
+            self._take_baseline(torrents)
             return
 
         for torrent in torrents:
@@ -138,6 +145,15 @@ class Pipeline:
             return
 
         self._link(hash_, content, Identification(decision.candidate, content.kind))
+
+    @_serialized
+    def _take_baseline(self, torrents) -> None:
+        """Settle everything finished before nasflow's first run, filing nothing."""
+        for torrent in torrents:
+            self.store.upsert_discovered(torrent)
+            self.store.set_state(torrent.hash, "done", reason="finished before nasflow started")
+        self.store.set_flag(_BASELINE_FLAG)
+        log.info("first run: left %d already-finished torrents alone", len(torrents))
 
     # ---- human actions ---------------------------------------------------
 

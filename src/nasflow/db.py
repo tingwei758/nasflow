@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS items (
     updated_at      REAL NOT NULL,
     retry           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS flags (
+    name TEXT PRIMARY KEY
+);
 """
 
 # Columns added after the first release, applied to existing databases on open.
@@ -92,6 +95,16 @@ class Store:
     @_locked
     def close(self) -> None:
         self._conn.close()
+
+    @_locked
+    def get_flag(self, name: str) -> bool:
+        row = self._conn.execute("SELECT 1 FROM flags WHERE name = ?", (name,)).fetchone()
+        return row is not None
+
+    @_locked
+    def set_flag(self, name: str) -> None:
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
 
     @_locked
     def upsert_discovered(self, torrent: Torrent) -> None:

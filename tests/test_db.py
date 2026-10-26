@@ -169,3 +169,11 @@ def test_opens_a_database_created_before_the_retry_column(tmp_path):
     conn.commit()
     conn.close()
     assert Store(path).get("h1").retry is False
+
+
+def test_flags_default_to_unset_and_persist(tmp_path):
+    s = store(tmp_path)
+    assert s.get_flag("baseline_taken") is False
+    s.set_flag("baseline_taken")
+    s.close()
+    assert Store(tmp_path / "nasflow.db").get_flag("baseline_taken") is True

@@ -186,3 +186,7 @@ def test_overlapping_roots_are_refused(tmp_path, downloads, staging):
 def test_sibling_roots_with_a_shared_prefix_are_fine(tmp_path):
     cfg = load_config(_with_roots(tmp_path, "/volume1/docker/qb/down", "/volume1/docker/qb/downloads2"))
     assert cfg.staging_root.name == "downloads2"
+
+
+def test_existing_torrents_are_skipped_on_first_run_by_default(tmp_path):
+    assert load_config(write_minimal(tmp_path)).skip_existing_on_first_run is True

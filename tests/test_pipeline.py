@@ -91,6 +91,8 @@ def env(tmp_path):
     cfg = Config(
         downloads_root=downloads, staging_root=staging, db_path=tmp_path / "nasflow.db",
         qb_url="http://qb", qb_username="u", qb_password="p", tmdb_api_key="k",
+        # These fixtures test processing; the first-run baseline has its own tests.
+        skip_existing_on_first_run=False,
     )
     store = Store(cfg.db_path)
     qbit = FakeQbit()
@@ -594,3 +596,53 @@ def test_unexpected_error_text_never_carries_a_secret(env):
     reason = store.get(t.hash).reason
     assert "tmdb-secret-123" not in reason and "qb-secret-456" not in reason
     assert "RuntimeError" in reason
+
+
+# ---- spec non-goal: no backfill of what qBittorrent finished before us -------
+
+def _first_run(env, **overrides):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    cfg = replace(cfg, skip_existing_on_first_run=True, **overrides)
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    return build(cfg, store, qbit, tmdb)
+
+
+def test_first_poll_settles_existing_torrents_without_linking(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    old = make_movie(downloads, PEGASUS)
+    qbit.torrents = [old]
+    _first_run(env).poll_once()
+    item = store.get(old.hash)
+    assert item.state == "done" and "before" in item.reason
+    assert not any(staging.rglob("*.mkv"))
+
+
+def test_torrents_finishing_after_the_first_poll_are_processed(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    p = _first_run(env)
+    p.poll_once()  # nothing finished yet: the baseline is empty, but taken
+    new = make_movie(downloads, PEGASUS)
+    qbit.torrents = [new]
+    p.poll_once()
+    assert store.get(new.hash).state == "ready"
+
+
+def test_baseline_waits_for_qbittorrent_to_answer(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    p = _first_run(env)
+    qbit.fail = True
+    p.poll_once()
+    qbit.fail = False
+    old = make_movie(downloads, PEGASUS)
+    qbit.torrents = [old]
+    p.poll_once()
+    assert store.get(old.hash).state == "done"
+
+
+def test_baseline_is_taken_once_per_database(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    _first_run(env).poll_once()
+    new = make_movie(downloads, PEGASUS)
+    qbit.torrents = [new]
+    _first_run(env).poll_once()  # e.g. after a container restart
+    assert store.get(new.hash).state == "ready"
