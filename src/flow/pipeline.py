@@ -74,7 +74,17 @@ class Pipeline:
                 item = self.store.get(torrent.hash)
                 if item is not None and item.state in _SETTLED:
                     continue
-                self.process(torrent.hash)
+                try:
+                    self.process(torrent.hash)
+                except Exception as exc:
+                    # One bad item becomes one stopped card, never a stuck
+                    # pipeline that skips every torrent after it.
+                    log.exception("processing %s failed", torrent.name)
+                    self.store.set_state(
+                        torrent.hash,
+                        "needs_you",
+                        reason=f"unexpected error: {type(exc).__name__}: {exc}",
+                    )
 
     @_serialized
     def process(self, hash_: str) -> None:

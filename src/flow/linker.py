@@ -63,8 +63,10 @@ def execute_links(links: list[PlannedLink], staging_root: Path) -> None:
         _check_confined(link.dest, staging_root)
 
     created: list[Path] = []
+    current: PlannedLink | None = None
     try:
         for link in links:
+            current = link
             if link.dest.exists():
                 if _same_file(link.source, link.dest):
                     continue
@@ -84,13 +86,17 @@ def execute_links(links: list[PlannedLink], staging_root: Path) -> None:
             except OSError as exc:
                 raise LinkConflict(link.dest, f"could not hardlink: {exc}") from exc
             created.append(link.dest)
-    except LinkConflict:
+    except (LinkConflict, OSError) as exc:
+        # Any failure — including mkdir or stat being refused — undoes this
+        # call's links, so a half-filed season never looks ready.
         for path in reversed(created):
             try:
                 path.unlink()
             except OSError:
                 pass
-        raise
+        if isinstance(exc, LinkConflict):
+            raise
+        raise LinkConflict(current.dest, f"filesystem error: {exc}") from exc
 
 
 def prune_empty_dirs(root: Path) -> list[Path]:

@@ -387,3 +387,23 @@ def test_human_resolve_is_not_overwritten_by_a_concurrent_poll(env):
 
     assert store.get(t.hash).state == "ready"
     assert store.get(t.hash).chosen_tmdb_id == 72113
+
+
+def test_one_item_crashing_does_not_block_the_rest_of_the_poll(env, monkeypatch):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    bad = make_movie(downloads, LONGMEN)
+    good = make_movie(downloads, PEGASUS)
+    qbit.torrents = [bad, good]
+    tmdb.results = {"Pegasus": [cand(1, "飞驰人生", "Pegasus", 2019, 0.95)]}
+    real_search = tmdb.search
+
+    def explode_on_longmen(parsed, kind):
+        if parsed.title_zh == "龙门飞甲":
+            raise KeyError("boom")
+        return real_search(parsed, kind)
+
+    tmdb.search = explode_on_longmen
+    build(cfg, store, qbit, tmdb).poll_once()
+    assert store.get(bad.hash).state == "needs_you"
+    assert "unexpected error" in store.get(bad.hash).reason
+    assert store.get(good.hash).state == "ready"

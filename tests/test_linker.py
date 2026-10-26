@@ -172,3 +172,25 @@ def test_prefix_sibling_is_not_inside(tmp_path):
     (tmp_path / "staging").mkdir()
     with pytest.raises(OutsideStaging):
         execute_links([PlannedLink(src, tmp_path / "staging2/X.mkv")], tmp_path / "staging")
+
+
+# ---- review: any OSError must still roll the batch back ---------------------
+
+
+def test_oserror_mid_batch_rolls_back_and_surfaces_as_conflict(tmp_path, monkeypatch):
+    """e.g. mkdir refused because the human made the show folder as another DSM user."""
+    src = make_source(tmp_path)
+    first = PlannedLink(src, tmp_path / "staging/TV/Show/Season 1/e1.mkv")
+    second = PlannedLink(src, tmp_path / "staging/TV/Show/Season 2/e1.mkv")
+    real_mkdir = Path.mkdir
+
+    def refuse_season_2(self, *args, **kwargs):
+        if self.name == "Season 2":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", refuse_season_2)
+    with pytest.raises(LinkConflict) as exc:
+        execute_links([first, second], tmp_path / "staging")
+    assert "Permission denied" in str(exc.value)
+    assert not first.dest.exists()
