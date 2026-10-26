@@ -111,6 +111,22 @@ class TmdbClient:
         self._language = language
         self._client = client or httpx.Client(timeout=_TIMEOUT)
 
+    def _describe(self, exc: Exception) -> str:
+        """An error summary that cannot contain the API key.
+
+        TMDB v3 only accepts the key as a query parameter, and httpx puts the
+        full request URL in its exception text. That text would otherwise reach
+        an item's reason — stored in SQLite and shown on the board. Callers
+        raise `from None` so a logged traceback cannot carry it either.
+        """
+        if isinstance(exc, httpx.HTTPStatusError):
+            summary = f"HTTP {exc.response.status_code}"
+        elif isinstance(exc, ValueError):
+            summary = "response was not valid JSON"
+        else:
+            summary = f"{type(exc).__name__}: {exc}"
+        return summary.replace(self._api_key, "***") if self._api_key else summary
+
     def search(self, parsed: ParsedName, kind: str) -> list[Candidate]:
         """Search TMDB for `parsed`, best match first.
 
@@ -137,7 +153,7 @@ class TmdbClient:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise TmdbUnavailable(f"TMDB search failed: {exc}") from exc
+            raise TmdbUnavailable(f"TMDB search failed: {self._describe(exc)}") from None
 
         results = payload.get("results") or []
         scored = [score_candidate(raw, parsed, kind) for raw in results if "id" in raw]
@@ -155,7 +171,7 @@ class TmdbClient:
             response.raise_for_status()
             raw = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise TmdbUnavailable(f"TMDB lookup failed: {exc}") from exc
+            raise TmdbUnavailable(f"TMDB lookup failed: {self._describe(exc)}") from None
 
         chosen = ParsedName(
             title_en=raw.get("title") or raw.get("name"),

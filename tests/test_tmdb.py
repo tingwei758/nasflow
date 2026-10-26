@@ -164,3 +164,48 @@ def test_api_key_is_sent_but_never_in_the_reason(client):
 
 def test_untitled_parse_yields_no_search(client):
     assert client.search(parsed(), "movie") == []
+
+
+# ---- the key rides in the query string, so every error path must scrub it
+
+SECRET = "sekrit-tmdb-key-0123456789"
+
+
+@pytest.mark.parametrize("status", [401, 429, 500])
+def test_search_http_error_never_carries_the_key(status):
+    client = TmdbClient(SECRET)
+    with respx.mock:
+        respx.get(SEARCH_MOVIE).respond(status)
+        with pytest.raises(TmdbUnavailable) as exc:
+            client.search(parsed(title_en="Pegasus", year=2019), "movie")
+    assert SECRET not in str(exc.value)
+    assert str(status) in str(exc.value)
+
+
+def test_get_http_error_never_carries_the_key():
+    client = TmdbClient(SECRET)
+    with respx.mock:
+        respx.get(f"{BASE}/movie/1").respond(401)
+        with pytest.raises(TmdbUnavailable) as exc:
+            client.get(1, "movie")
+    assert SECRET not in str(exc.value)
+
+
+def test_transport_error_never_carries_the_key():
+    client = TmdbClient(SECRET)
+    with respx.mock:
+        respx.get(SEARCH_MOVIE).mock(
+            side_effect=httpx.ConnectError(f"boom for {SEARCH_MOVIE}?api_key={SECRET}")
+        )
+        with pytest.raises(TmdbUnavailable) as exc:
+            client.search(parsed(title_en="Pegasus"), "movie")
+    assert SECRET not in str(exc.value)
+
+
+def test_chained_cause_is_dropped_so_tracebacks_cannot_leak_the_key():
+    client = TmdbClient(SECRET)
+    with respx.mock:
+        respx.get(SEARCH_MOVIE).respond(401)
+        with pytest.raises(TmdbUnavailable) as exc:
+            client.search(parsed(title_en="Pegasus"), "movie")
+    assert exc.value.__cause__ is None and exc.value.__suppress_context__
