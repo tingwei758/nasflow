@@ -97,16 +97,22 @@ def scan_content(path: Path, media: MediaConfig) -> Content:
 def _season_from_folders(video: Path, root: Path) -> int | None:
     """The single season named by the nearest enclosing folder, up to `root`.
 
-    A season-range folder (S01-S03) answers "unknown" and stops the search:
-    going further up could only find a broader, less trustworthy name.
+    Only folders inside the content count: the folder qBittorrent saved it in
+    is not part of the release. A folder naming several seasons (S01-S03,
+    S01.S02) answers "unknown" and stops the search: going further up could
+    only find a broader, less trustworthy name.
     """
     for folder in video.parents:
+        if folder != root and root not in folder.parents:
+            return None
         if _SEASON_RANGE_RE.search(folder.name):
             return None
-        tag = _SEASON_ONLY_RE.search(folder.name)
-        if tag:
-            return int(tag.group(1))
-        if folder == root or root not in folder.parents:
+        seasons = {int(n) for n in _SEASON_ONLY_RE.findall(folder.name)}
+        if len(seasons) > 1:
+            return None
+        if seasons:
+            return seasons.pop()
+        if folder == root:
             return None
     return None
 

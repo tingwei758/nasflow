@@ -1,6 +1,8 @@
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from nasflow.config import MediaConfig
 from nasflow.scan import scan_content
 
@@ -181,4 +183,32 @@ def test_nearest_folder_season_wins(tmp_path):
     root = tmp_path / "Show.S01-S02.Pack"
     make_file(root / "Show.S02.Disc" / "Show.E03.mkv", BIG)
     make_file(root / "Show.S02.Disc" / "Show.E04.mkv", BIG)
+    assert {v.season for v in scan_content(root, MEDIA).videos} == {2}
+
+
+# ---- review 2: folder seasons stay inside the content ------------------------
+
+def test_single_file_ignores_the_season_of_the_folder_it_was_saved_in(tmp_path):
+    """qB's save folder is not part of the release; its name proves nothing."""
+    video = make_file(tmp_path / "Other.Show.S03" / "Show.EP05.mkv", BIG)
+    assert [(v.season, v.episode) for v in scan_content(video, MEDIA).videos] == [(None, 5)]
+
+
+def test_release_folder_ignores_the_season_of_its_parent(tmp_path):
+    root = tmp_path / "Other.Show.S03" / "Show.Complete"
+    make_file(root / "Show.EP05.mkv", BIG)
+    assert {v.season for v in scan_content(root, MEDIA).videos} == {None}
+
+
+@pytest.mark.parametrize("folder", ["Show.S01.S02", "Show.S01~S03", "Show.S01+S02", "Show S01 & S02"])
+def test_folder_naming_several_seasons_names_none(tmp_path, folder):
+    root = tmp_path / folder
+    make_file(root / "Show.E01.mkv", BIG)
+    make_file(root / "Show.E02.mkv", BIG)
+    assert {v.season for v in scan_content(root, MEDIA).videos} == {None}
+
+
+def test_the_same_season_named_twice_is_still_that_season(tmp_path):
+    root = tmp_path / "Show.S02.Complete.S02"
+    make_file(root / "Show.E01.mkv", BIG)
     assert {v.season for v in scan_content(root, MEDIA).videos} == {2}
