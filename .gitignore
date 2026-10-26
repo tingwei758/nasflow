@@ -14,7 +14,7 @@ venv/
 config.toml
 .env
 
-# flow runtime state
+# nasflow runtime state
 *.db
 *.sqlite3
 
@@ -22,3 +22,9 @@ config.toml
 
 # upstream reference clone, not part of this project
 hlink/
+
+# isolated worktrees
+.worktrees/
+
+# python venv
+.venv/

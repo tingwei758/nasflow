@@ -1,0 +1,81 @@
+# nasflow configuration — copy to config.toml and edit.
+#
+# config.toml is git-ignored because it holds your TMDB key and qBittorrent
+# password. Both can instead be supplied as NASFLOW_TMDB_API_KEY and
+# NASFLOW_QB_PASSWORD environment variables, which take precedence over this file.
+
+# Host path to qBittorrent's completed downloads. nasflow only ever reads here.
+downloads_root = "/volume1/docker/qb/downloads"
+
+# Host path nasflow hardlinks into. Hardlinks fail with EXDEV across either of:
+#   - Synology shares (each DSM shared folder is its own btrfs subvolume), or
+#   - Docker bind mounts (even two mounts of the same folder).
+# So staging_root and downloads_root must both live under NASFLOW_QB_ROOT, the
+# single folder docker-compose.yml mounts at the same path in the container.
+staging_root = "/volume1/docker/qb/staging"
+
+db_path = "/config/nasflow.db"
+
+# qBittorrent WebUI. nasflow polls this; it never uses the AutoRun hook, because
+# the filesystem cannot distinguish a complete download from an incomplete one.
+qb_url = "http://192.168.4.126:8999"
+qb_username = "admin"
+qb_password = "change-me"
+
+# The path prefix qBittorrent reports inside its own container, mapped onto
+# downloads_root above.
+container_downloads_prefix = "/downloads"
+
+tmdb_api_key = "change-me"
+tmdb_language = "zh-CN"
+# A second search pass in English. zh-CN results hide a film's English title
+# whenever TMDB has a Chinese translation, which let a making-of documentary
+# outscore the film itself. Set to "" to disable.
+tmdb_english_language = "en-US"
+
+poll_interval_s = 60
+
+# The first time nasflow reaches qBittorrent, everything it has already finished
+# is recorded as done and left alone; only later downloads are filed. Set to
+# false (before the first start, or with a fresh nasflow.db) to file those too.
+skip_existing_on_first_run = true
+
+# Identification confidence. nasflow stops and asks rather than guessing when the
+# best match scores below score_accept, or beats the runner-up by less than
+# score_gap.
+score_accept = 0.80
+score_gap = 0.10
+# ...and the title alone must be at least this similar.
+title_accept = 0.75
+
+# Chinese-only release names have no English title to cross-check, so they stop
+# for confirmation even when the score is high. Set false to trust the score.
+require_english_title = true
+
+# Inside the container nasflow listens on all interfaces; docker-compose.yml
+# publishes it on NASFLOW_LAN_IP only. Do NOT expose it to the internet — nasflow
+# has no authentication by design. Keep bind_port in step with the container
+# side of the compose port mapping (9987).
+bind_host = "0.0.0.0"
+bind_port = 9987
+
+[layout]
+# Defaults match the existing library convention. Templates use str.format.
+movies_dirname = "Movies"
+tv_dirname = "TV Shows"
+season_dirname = "Season {season}"          # "Season 1", not "Season 01"
+movie_dirname = "{title} ({year})"
+movie_filename = "{title} ({year})"         # stem only; extension is preserved
+show_dirname = "{title} ({year})"
+episode_filename = "{title} - S{season:02d}E{episode:02d}"
+specials_season = 0                         # SxxE00 specials land in "Season 0"
+default_season = 1                          # files carrying Exx but no Sxx
+
+[media]
+video_extensions = [".mkv", ".mp4", ".avi", ".rmvb", ".ts", ".m2ts"]
+subtitle_extensions = [".srt", ".ass", ".ssa", ".sub", ".idx"]
+# Deliberately empty: .nfo files and posters are NOT linked. Plex fetches its
+# own metadata, and a stale .nfo actively misleads its agent.
+companion_extensions = []
+exclude_name_patterns = ["*sample*", "*trailer*"]
+min_video_bytes = 50_000_000

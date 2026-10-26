@@ -1,0 +1,11 @@
+.git
+.venv
+.worktrees
+.superpowers
+tests
+docs
+scripts
+config.toml
+.env
+*.db
+**/__pycache__

@@ -1,0 +1,44 @@
+[project]
+name = "nasflow"
+version = "0.1.0"
+description = "Polls qBittorrent, identifies releases via TMDB, hardlinks them into a Plex-convention staging tree"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.27",
+    "guessit>=3.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "respx>=0.21",
+    "ruff>=0.7",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"nasflow.web" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Pinned so results do not depend on a user-level ruff config.
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Real release names are long and must stay verbatim.
+"tests/**" = ["E501"]
