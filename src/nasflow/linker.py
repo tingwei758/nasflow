@@ -1,4 +1,4 @@
-"""The only module in flow that creates anything on disk.
+"""The only module in nasflow that creates anything on disk.
 
 Three rules it must never break:
 
@@ -56,7 +56,7 @@ def execute_links(links: list[PlannedLink], staging_root: Path) -> None:
     Every destination is confined to `staging_root` before anything is
     created. An existing destination that is already a hardlink to the same
     source is a no-op success, which makes re-processing a torrent safe. An
-    existing destination that is a different file raises `LinkConflict` — flow
+    existing destination that is a different file raises `LinkConflict` — nasflow
     never overwrites.
     """
     for link in links:
@@ -100,7 +100,7 @@ def execute_links(links: list[PlannedLink], staging_root: Path) -> None:
 
 
 # Created and removed at startup; never left behind.
-_PROBE_NAME = ".flow-link-probe"
+_PROBE_NAME = ".nasflow-link-probe"
 
 
 def _first_file(root: Path) -> Path | None:

@@ -21,7 +21,7 @@ from .qbit import QbitClient
 from .tmdb import TmdbClient
 from .web.app import create_app
 
-log = logging.getLogger("flow")
+log = logging.getLogger("nasflow")
 
 
 async def poll_loop(pipeline, interval_s: float, *, max_iterations=None, sleep=asyncio.sleep):
@@ -81,12 +81,12 @@ def configure_logging() -> None:
 
 
 def resolve_config_path(argv: list[str]) -> Path:
-    parser = argparse.ArgumentParser(prog="flow")
+    parser = argparse.ArgumentParser(prog="nasflow")
     parser.add_argument("--config", type=Path, default=None)
     args = parser.parse_args(argv)
     if args.config is not None:
         return args.config
-    env = os.environ.get("FLOW_CONFIG")
+    env = os.environ.get("NASFLOW_CONFIG")
     return Path(env) if env else DEFAULT_CONFIG_PATH
 
 
@@ -110,7 +110,7 @@ def check_same_filesystem(cfg: Config) -> None:
 
 
 def _fail(message: str) -> None:
-    print(f"flow: {message}", file=sys.stderr)
+    print(f"nasflow: {message}", file=sys.stderr)
     sys.exit(2)
 
 

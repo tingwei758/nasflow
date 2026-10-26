@@ -80,7 +80,7 @@ async function refresh() {
   } catch (error) {
     // Keep showing the last good board rather than blanking it.
     if (lastBoard) render(lastBoard);
-    setStatus(`can't reach flow: ${error.message}`, true);
+    setStatus(`can't reach nasflow: ${error.message}`, true);
   }
 }
 
@@ -88,7 +88,7 @@ async function start() {
   try {
     meta = await getMeta();
   } catch (error) {
-    setStatus(`can't reach flow: ${error.message}`, true);
+    setStatus(`can't reach nasflow: ${error.message}`, true);
     setTimeout(start, POLL_MS);
     return;
   }

@@ -2,7 +2,7 @@
 
 1. Hardlinks cannot cross bind mounts (EXDEV, verified), so downloads and
    staging must be reached through ONE mount, at the same path as on the host.
-2. flow never touches the library, so /volume1/Media is never mounted.
+2. nasflow never touches the library, so /volume1/Media is never mounted.
 """
 
 import re
@@ -42,32 +42,32 @@ def test_library_is_never_mounted():
 
 
 def test_downloads_and_staging_share_one_mount_at_the_host_path():
-    shared = [v for v in _volumes() if v.startswith("${FLOW_QB_ROOT")]
+    shared = [v for v in _volumes() if v.startswith("${NASFLOW_QB_ROOT")]
     assert len(shared) == 1
     host, container = shared[0].split(":")[:2]
-    assert host == container == "${FLOW_QB_ROOT}"
+    assert host == container == "${NASFLOW_QB_ROOT}"
 
 
 def test_shared_mount_is_not_read_only():
     """`:ro` on either side of a hardlink makes os.link fail with EXDEV."""
-    shared = next(v for v in _volumes() if v.startswith("${FLOW_QB_ROOT"))
+    shared = next(v for v in _volumes() if v.startswith("${NASFLOW_QB_ROOT"))
     assert not shared.endswith(":ro")
 
 
 def test_example_config_paths_live_inside_the_shared_mount():
     cfg = tomllib.loads((ROOT / "config.example.toml").read_text(encoding="utf-8"))
-    qb_root = Path(_env()["FLOW_QB_ROOT"])
+    qb_root = Path(_env()["NASFLOW_QB_ROOT"])
     for key in ("downloads_root", "staging_root"):
         assert qb_root in Path(cfg[key]).parents, key
 
 
 def test_port_is_published_on_the_lan_address_only():
-    assert re.search(r'"\$\{FLOW_LAN_IP[^}]*\}:\$\{FLOW_PORT[^}]*\}:\d+"', COMPOSE)
+    assert re.search(r'"\$\{NASFLOW_LAN_IP[^}]*\}:\$\{NASFLOW_PORT[^}]*\}:\d+"', COMPOSE)
     assert "0.0.0.0" not in COMPOSE
 
 
 def test_runs_as_qbittorrent_file_owner_by_default():
-    assert '${FLOW_PUID:-911}:${FLOW_PGID:-911}' in COMPOSE
+    assert '${NASFLOW_PUID:-911}:${NASFLOW_PGID:-911}' in COMPOSE
 
 
 def test_secrets_never_enter_the_image():
@@ -82,5 +82,5 @@ def test_env_example_has_no_secrets():
 
 def test_published_port_matches_the_config_port():
     cfg = tomllib.loads((ROOT / "config.example.toml").read_text(encoding="utf-8"))
-    container_port = re.search(r'\$\{FLOW_PORT[^}]*\}:(\d+)"', COMPOSE).group(1)
-    assert int(container_port) == cfg["bind_port"] == int(_env()["FLOW_PORT"])
+    container_port = re.search(r'\$\{NASFLOW_PORT[^}]*\}:(\d+)"', COMPOSE).group(1)
+    assert int(container_port) == cfg["bind_port"] == int(_env()["NASFLOW_PORT"])

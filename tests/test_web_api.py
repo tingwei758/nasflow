@@ -1,4 +1,4 @@
-from flow.qbit import Torrent
+from nasflow.qbit import Torrent
 
 from .test_pipeline import cand, make_junk, make_movie
 

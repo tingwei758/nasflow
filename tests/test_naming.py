@@ -1,6 +1,6 @@
 import pytest
 
-from flow.naming import parse_release_name
+from nasflow.naming import parse_release_name
 
 from .corpus import CORPUS
 
@@ -81,7 +81,7 @@ def test_title_recovered_when_guessit_returns_none():
 
 
 def test_every_real_download_name_yields_some_title():
-    """Regression guard: a name flow cannot title at all can never be matched."""
+    """Regression guard: a name nasflow cannot title at all can never be matched."""
     for name, _ in CORPUS:
         p = parse_release_name(name)
         if "CE教学实例应用" in name:

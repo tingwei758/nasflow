@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from flow.pathmap import to_container_path, to_host_path
+from nasflow.pathmap import to_container_path, to_host_path
 
 PFX = "/downloads"
 ROOT = Path("/volume1/docker/qb/downloads")

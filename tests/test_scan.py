@@ -1,8 +1,8 @@
 from dataclasses import replace
 from pathlib import Path
 
-from flow.config import MediaConfig
-from flow.scan import scan_content
+from nasflow.config import MediaConfig
+from nasflow.scan import scan_content
 
 MEDIA = MediaConfig()
 BIG = 8_000_000_000

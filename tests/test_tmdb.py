@@ -2,8 +2,8 @@ import httpx
 import pytest
 import respx
 
-from flow.models import ParsedName
-from flow.tmdb import TmdbClient, TmdbUnavailable, score_candidate
+from nasflow.models import ParsedName
+from nasflow.tmdb import TmdbClient, TmdbUnavailable, score_candidate
 
 BASE = "https://api.themoviedb.org/3"
 SEARCH_MOVIE = f"{BASE}/search/movie"
@@ -218,9 +218,9 @@ def test_chained_cause_is_dropped_so_tracebacks_cannot_leak_the_key():
 
 from pathlib import Path  # noqa: E402
 
-from flow.config import Config  # noqa: E402
-from flow.decide import decide  # noqa: E402
-from flow.models import Content, VideoFile  # noqa: E402
+from nasflow.config import Config  # noqa: E402
+from nasflow.decide import decide  # noqa: E402
+from nasflow.models import Content, VideoFile  # noqa: E402
 
 _CFG = Config(
     downloads_root=Path("/d"), staging_root=Path("/s"), db_path=Path("/db"),

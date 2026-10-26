@@ -28,7 +28,7 @@ from .tmdb import TmdbUnavailable
 
 log = logging.getLogger(__name__)
 
-# States that mean "flow is finished with this, leave it alone".
+# States that mean "nasflow is finished with this, leave it alone".
 _SETTLED = frozenset({"ready", "done", "ignored"})
 
 

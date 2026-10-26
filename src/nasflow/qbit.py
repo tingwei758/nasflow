@@ -1,6 +1,6 @@
 """qBittorrent WebUI client.
 
-flow polls this rather than using qBittorrent's AutoRun hook, for two reasons:
+nasflow polls this rather than using qBittorrent's AutoRun hook, for two reasons:
 the hook would run inside qBittorrent's own container and depend on whatever
 binaries that image ships, and — more importantly — the filesystem cannot tell
 a finished download from an unfinished one. Partial files carry no marker, and

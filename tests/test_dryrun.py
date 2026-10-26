@@ -2,7 +2,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from flow.config import Config
+from nasflow.config import Config
 
 from .test_pipeline import (
     BM_S06,

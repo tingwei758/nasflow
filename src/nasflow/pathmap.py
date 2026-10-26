@@ -1,7 +1,7 @@
 """Container <-> host path translation.
 
 qBittorrent reports paths as its own container sees them (`/downloads/...`);
-flow sees the same files at a host path. Nothing else lives in this module.
+nasflow sees the same files at a host path. Nothing else lives in this module.
 """
 
 from __future__ import annotations

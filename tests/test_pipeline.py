@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from flow.config import Config
-from flow.db import Store
-from flow.models import Candidate
-from flow.pipeline import Pipeline
-from flow.qbit import QbitUnavailable, Torrent
-from flow.tmdb import TmdbUnavailable
+from nasflow.config import Config
+from nasflow.db import Store
+from nasflow.models import Candidate
+from nasflow.pipeline import Pipeline
+from nasflow.qbit import QbitUnavailable, Torrent
+from nasflow.tmdb import TmdbUnavailable
 
 PEGASUS = "飞驰人生.Pegasus.2019.BluRay.1080p.x265.10bit.MNHD-FRDS"
 LONGMEN = "龙门飞甲.2011.HKG.1080p.国粤双语.简繁中字￡CMCT星辰"
@@ -88,7 +88,7 @@ def env(tmp_path):
     downloads.mkdir()
     staging.mkdir()
     cfg = Config(
-        downloads_root=downloads, staging_root=staging, db_path=tmp_path / "flow.db",
+        downloads_root=downloads, staging_root=staging, db_path=tmp_path / "nasflow.db",
         qb_url="http://qb", qb_username="u", qb_password="p", tmdb_api_key="k",
     )
     store = Store(cfg.db_path)

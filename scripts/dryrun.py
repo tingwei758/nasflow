@@ -1,4 +1,4 @@
-"""Show what flow would do with every entry in a downloads folder. Writes nothing.
+"""Show what nasflow would do with every entry in a downloads folder. Writes nothing.
 
 Uses the very functions the pipeline uses (scan, parse, TMDB, decide, plan),
 so its verdicts cannot drift from the real thing.
@@ -17,13 +17,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from flow.config import Config, load_config  # noqa: E402
-from flow.decide import decide  # noqa: E402
-from flow.layout import plan_links  # noqa: E402
-from flow.models import Identification  # noqa: E402
-from flow.naming import parse_release_name  # noqa: E402
-from flow.scan import scan_content  # noqa: E402
-from flow.tmdb import TmdbClient, TmdbUnavailable  # noqa: E402
+from nasflow.config import Config, load_config  # noqa: E402
+from nasflow.decide import decide  # noqa: E402
+from nasflow.layout import plan_links  # noqa: E402
+from nasflow.models import Identification  # noqa: E402
+from nasflow.naming import parse_release_name  # noqa: E402
+from nasflow.scan import scan_content  # noqa: E402
+from nasflow.tmdb import TmdbClient, TmdbUnavailable  # noqa: E402
 
 
 @dataclass

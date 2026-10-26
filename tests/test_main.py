@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from flow import main as flow_main
-from flow.config import DEFAULT_CONFIG_PATH, Config
+from nasflow import main as flow_main
+from nasflow.config import DEFAULT_CONFIG_PATH, Config
 
 
 class RecordingPipeline:
@@ -65,7 +65,7 @@ def test_poll_loop_sleeps_the_configured_interval():
 def _cfg(tmp_path: Path) -> Config:
     return Config(
         downloads_root=tmp_path / "dl", staging_root=tmp_path / "st",
-        db_path=tmp_path / "cfg/flow.db", qb_url="http://qb:8999", qb_username="u",
+        db_path=tmp_path / "cfg/nasflow.db", qb_url="http://qb:8999", qb_username="u",
         qb_password="p", tmdb_api_key="k", bind_host="192.168.1.20", bind_port=9123,
     )
 
@@ -81,12 +81,12 @@ def test_app_binds_configured_host_and_port(tmp_path, monkeypatch):
 
 
 def test_config_path_defaults_from_config_module(monkeypatch):
-    monkeypatch.delenv("FLOW_CONFIG", raising=False)
+    monkeypatch.delenv("NASFLOW_CONFIG", raising=False)
     assert flow_main.resolve_config_path([]) == DEFAULT_CONFIG_PATH
 
 
 def test_config_path_from_env_then_flag(monkeypatch):
-    monkeypatch.setenv("FLOW_CONFIG", "/env/config.toml")
+    monkeypatch.setenv("NASFLOW_CONFIG", "/env/config.toml")
     assert flow_main.resolve_config_path([]) == Path("/env/config.toml")
     assert flow_main.resolve_config_path(["--config", "/flag.toml"]) == Path("/flag.toml")
 

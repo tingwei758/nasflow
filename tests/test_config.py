@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from flow.config import load_config
+from nasflow.config import load_config
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 MINIMAL_TOML = """
 downloads_root = "/volume1/docker/qb/downloads"
 staging_root = "/volume1/docker/qb/staging"
-db_path = "/config/flow.db"
+db_path = "/config/nasflow.db"
 qb_url = "http://localhost:8080"
 qb_username = "admin"
 qb_password = "secret-pw"
@@ -44,13 +44,13 @@ def test_load_config_reads_toml(tmp_path):
 
 
 def test_env_overrides_tmdb_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("FLOW_TMDB_API_KEY", "from-env")
+    monkeypatch.setenv("NASFLOW_TMDB_API_KEY", "from-env")
     cfg = load_config(write_minimal(tmp_path))
     assert cfg.tmdb_api_key == "from-env"
 
 
 def test_env_overrides_qb_password(tmp_path, monkeypatch):
-    monkeypatch.setenv("FLOW_QB_PASSWORD", "pw-from-env")
+    monkeypatch.setenv("NASFLOW_QB_PASSWORD", "pw-from-env")
     cfg = load_config(write_minimal(tmp_path))
     assert cfg.qb_password == "pw-from-env"
 
@@ -129,7 +129,7 @@ def _code_string_literals(source: str) -> list[str]:
 
 
 def test_no_hardcoded_paths_or_templates_outside_config():
-    for py in (SRC / "flow").rglob("*.py"):
+    for py in (SRC / "nasflow").rglob("*.py"):
         if py.name == "config.py":
             continue
         for literal in _code_string_literals(py.read_text(encoding="utf-8")):
@@ -151,7 +151,7 @@ def test_the_guard_ignores_docstrings_and_comments():
 
 def test_defaults_tuned_from_the_real_nas_dry_run():
     """0.10: on the 252 real downloads every top pick 0.10-0.14 ahead was right."""
-    from flow.config import Config as C
+    from nasflow.config import Config as C
     defaults = C(downloads_root=Path("/d"), staging_root=Path("/s"), db_path=Path("/db"),
                  qb_url="x", qb_username="u", qb_password="p", tmdb_api_key="k")
     assert defaults.score_gap == 0.10

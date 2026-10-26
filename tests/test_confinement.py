@@ -1,14 +1,14 @@
 """Filesystem writes are confined to linker.py.
 
 Downloads and staging share one read-write mount (hardlinks cannot cross bind
-mounts), so the kernel no longer keeps flow away from the files qBittorrent is
+mounts), so the kernel no longer keeps nasflow away from the files qBittorrent is
 seeding. These tests keep every write behind the one module that checks it.
 """
 
 import ast
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "flow"
+SRC = Path(__file__).resolve().parents[1] / "src" / "nasflow"
 
 WRITE_METHODS = {
     "link", "unlink", "remove", "removedirs", "rename", "rmdir", "mkdir", "makedirs",

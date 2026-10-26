@@ -1,4 +1,4 @@
-// The resolve panel for a "needs you" card: what flow worked out on its own,
+// The resolve panel for a "needs you" card: what nasflow worked out on its own,
 // the ranked candidates, a manual search, and the exact paths that confirming
 // would create — previewed before anything is linked.
 
@@ -169,7 +169,7 @@ export function openResolve(item, meta, onChanged) {
       const { state } = await resolveItem(item.hash, selected);
       await onChanged();
       if (state === "ready") dialog.close();
-      else setMessage("flow could not link this. The card now says why.");
+      else setMessage("nasflow could not link this. The card now says why.");
     }),
   );
 

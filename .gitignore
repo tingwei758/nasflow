@@ -14,7 +14,7 @@ venv/
 config.toml
 .env
 
-# flow runtime state
+# nasflow runtime state
 *.db
 *.sqlite3
 

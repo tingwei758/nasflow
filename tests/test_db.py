@@ -1,8 +1,8 @@
 import time
 
-from flow.db import Store
-from flow.models import Candidate
-from flow.qbit import Torrent
+from nasflow.db import Store
+from nasflow.models import Candidate
+from nasflow.qbit import Torrent
 
 
 def torrent(hash_="h1", name="Some.Release.2020"):
@@ -20,13 +20,13 @@ def candidate(tmdb_id=1, score=0.9):
 
 
 def store(tmp_path):
-    return Store(tmp_path / "flow.db")
+    return Store(tmp_path / "nasflow.db")
 
 
 def test_schema_created_on_first_open(tmp_path):
     s = store(tmp_path)
     assert s.all_items() == []
-    assert (tmp_path / "flow.db").exists()
+    assert (tmp_path / "nasflow.db").exists()
 
 
 def test_upsert_is_idempotent_on_hash(tmp_path):
@@ -46,7 +46,7 @@ def test_state_transition_persists(tmp_path):
     s = store(tmp_path)
     s.upsert_discovered(torrent())
     s.set_state("h1", "needs_you", reason="2 close matches")
-    reopened = Store(tmp_path / "flow.db")
+    reopened = Store(tmp_path / "nasflow.db")
     assert reopened.get("h1").state == "needs_you"
     assert reopened.get("h1").reason == "2 close matches"
 

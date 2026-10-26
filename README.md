@@ -1,6 +1,6 @@
-# flow
+# nasflow
 
-flow watches qBittorrent for finished downloads, works out what each one is
+nasflow watches qBittorrent for finished downloads, works out what each one is
 (using its own parser and TMDB), and **hardlinks** it into a staging folder
 already named the way Plex expects:
 
@@ -9,21 +9,21 @@ staging/Movies/飞驰人生 (2019)/飞驰人生 (2019).mkv
 staging/TV Shows/黑镜 (2011)/Season 6/黑镜 - S06E01.mkv
 ```
 
-When flow isn't sure, it stops and asks you on a board instead of guessing.
+When nasflow isn't sure, it stops and asks you on a board instead of guessing.
 You then move finished folders into your library yourself, in File Station.
 
 Hardlinks take no extra space and appear instantly. qBittorrent keeps seeding
-the originals, which flow never renames, moves, or modifies.
+the originals, which nasflow never renames, moves, or modifies.
 
 ## The board
 
-Open `http://<FLOW_LAN_IP>:<FLOW_PORT>` (e.g. `http://192.168.4.126:9987`).
+Open `http://<NASFLOW_LAN_IP>:<NASFLOW_PORT>` (e.g. `http://192.168.4.126:9987`).
 
 | Column | Meaning |
 |---|---|
-| Downloaded | qBittorrent finished it; flow hasn't looked yet |
-| Identifying | flow is looking it up |
-| Needs you | flow stopped. Click **Choose…** to see why, pick the right match (or search), check the exact paths it will create, then **Confirm & link**, or mark it **Not media** |
+| Downloaded | qBittorrent finished it; nasflow hasn't looked yet |
+| Identifying | nasflow is looking it up |
+| Needs you | nasflow stopped. Click **Choose…** to see why, pick the right match (or search), check the exact paths it will create, then **Confirm & link**, or mark it **Not media** |
 | Ready to move | linked into staging, waiting for you to move it |
 
 A card leaves the board once its folder is gone from staging, so there is
@@ -31,11 +31,11 @@ nothing to mark as done.
 
 Some things to expect:
 
-- **A card stops once and waits.** When flow stops because it isn't sure, it
+- **A card stops once and waits.** When nasflow stops because it isn't sure, it
   doesn't ask TMDB again until you act. It *does* retry stops that can clear
   on their own: TMDB being unreachable, or a destination already being taken.
 - **A second copy of something already in staging stops** with a destination
-  conflict, because flow never overwrites. A 4K re-download is one example.
+  conflict, because nasflow never overwrites. A 4K re-download is one example.
   Move the first copy to the library and the second one links on the next
   poll.
 - **Seasons from separate downloads share a show folder.** If Season 1 and
@@ -46,7 +46,7 @@ Some things to expect:
   them; confirming links the episodes only.
 - **Startup refuses a broken setup** instead of silently failing every link.
   It checks that downloads and staging don't overlap, and makes one test
-  hardlink (`staging/.flow-link-probe`), which it removes straight away.
+  hardlink (`staging/.nasflow-link-probe`), which it removes straight away.
 
 ## The one manual step: move into the library with File Station
 
@@ -65,22 +65,22 @@ library is up for replacement.
 
 ## Install (Synology Container Manager)
 
-1. **Copy this repository** to the NAS, e.g. `/volume1/docker/flow-src`.
+1. **Copy this repository** to the NAS, e.g. `/volume1/docker/nasflow-src`.
 2. **Create the config folder** and the staging folder:
-   - `/volume1/docker/flow`, for `config.toml` and `flow.db`
+   - `/volume1/docker/nasflow`, for `config.toml` and `nasflow.db`
    - `/volume1/docker/qb/staging`
 
    Both must be writable by UID/GID `911`, the owner of qBittorrent's files.
 3. **Create `.env`** from `.env.example` in the repository folder. Check
-   `FLOW_LAN_IP` and `FLOW_PORT`.
-4. **Create `/volume1/docker/flow/config.toml`** from `config.example.toml`. Fill in:
+   `NASFLOW_LAN_IP` and `NASFLOW_PORT`.
+4. **Create `/volume1/docker/nasflow/config.toml`** from `config.example.toml`. Fill in:
    - `qb_password`: the qBittorrent WebUI password
    - `tmdb_api_key`: the same key nastool uses (`rmt_tmdbkey` under `app:` in
-     `/volume1/docker/nastools/config/config.yaml`). flow keeps its own copy and
+     `/volume1/docker/nastools/config/config.yaml`). nasflow keeps its own copy and
      does not depend on nastool at runtime.
 
-   Alternatively, leave them out of the file and set `FLOW_QB_PASSWORD` /
-   `FLOW_TMDB_API_KEY` as container environment variables.
+   Alternatively, leave them out of the file and set `NASFLOW_QB_PASSWORD` /
+   `NASFLOW_TMDB_API_KEY` as container environment variables.
 5. **Container Manager → Project → Create**, point it at the repository folder
    (it picks up `docker-compose.yml`), and start it.
 
@@ -88,11 +88,11 @@ library is up for replacement.
 
 Linux refuses to hardlink across mount points (`EXDEV`). That includes two
 bind mounts of the *same* folder, and it includes a read-only mount on the
-source side. So `docker-compose.yml` mounts `FLOW_QB_ROOT` (the folder holding
+source side. So `docker-compose.yml` mounts `NASFLOW_QB_ROOT` (the folder holding
 both `downloads/` and `staging/`) **once, read-write, at the same path** as on
 the host.
 
-That means the kernel doesn't stop flow from writing to downloads, so flow's
+That means the kernel doesn't stop nasflow from writing to downloads, so nasflow's
 code does:
 
 - the linker refuses any destination that resolves outside `staging_root`
@@ -107,7 +107,7 @@ Everything (paths, folder and file name templates, file extensions,
 thresholds) lives in `config.toml`. See `config.example.toml` for every option
 with comments. Notable settings:
 
-- `score_accept` / `score_gap`: how sure flow must be before linking on its own.
+- `score_accept` / `score_gap`: how sure nasflow must be before linking on its own.
 - `require_english_title`: Chinese-only release names (e.g. `龙门飞甲.2011…`)
   have nothing to cross-check the match against, so they stop for you by
   default.
@@ -121,5 +121,5 @@ python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/python -m pytest
 ```
 
-`scripts/dryrun.py` shows what flow *would* do with a downloads folder,
+`scripts/dryrun.py` shows what nasflow *would* do with a downloads folder,
 without linking anything.

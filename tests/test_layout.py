@@ -1,9 +1,9 @@
 from dataclasses import replace
 from pathlib import Path
 
-from flow.config import LayoutConfig
-from flow.layout import plan_links
-from flow.models import Candidate, Content, Identification, VideoFile
+from nasflow.config import LayoutConfig
+from nasflow.layout import plan_links
+from nasflow.models import Candidate, Content, Identification, VideoFile
 
 LAYOUT = LayoutConfig()
 STAGING = Path("/staging")

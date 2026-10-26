@@ -1,9 +1,9 @@
 from dataclasses import replace
 from pathlib import Path
 
-from flow.config import Config
-from flow.decide import decide
-from flow.models import Candidate, Content, ParsedName, VideoFile
+from nasflow.config import Config
+from nasflow.decide import decide
+from nasflow.models import Candidate, Content, ParsedName, VideoFile
 
 CFG = Config(
     downloads_root=Path("/dl"), staging_root=Path("/staging"), db_path=Path("/db"),

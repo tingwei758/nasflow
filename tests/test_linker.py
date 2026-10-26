@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from flow.layout import PlannedLink
-from flow.linker import LinkConflict, OutsideStaging, execute_links, prune_empty_dirs
+from nasflow.layout import PlannedLink
+from nasflow.linker import LinkConflict, OutsideStaging, execute_links, prune_empty_dirs
 
 
 def make_source(tmp_path: Path, name: str = "src.mkv", data: bytes = b"payload") -> Path:
@@ -198,7 +198,7 @@ def test_oserror_mid_batch_rolls_back_and_surfaces_as_conflict(tmp_path, monkeyp
 
 # ---- startup probe: one real hardlink, written only in staging ---------------
 
-from flow.linker import probe_hardlink  # noqa: E402
+from nasflow.linker import probe_hardlink  # noqa: E402
 
 
 def test_probe_succeeds_and_leaves_nothing_behind(tmp_path):
@@ -216,7 +216,7 @@ def test_probe_reports_cross_device_failure(tmp_path, monkeypatch):
     def exdev(src, dst):
         raise OSError(errno.EXDEV, "Invalid cross-device link")
 
-    monkeypatch.setattr("flow.linker.os.link", exdev)
+    monkeypatch.setattr("nasflow.linker.os.link", exdev)
     problem = probe_hardlink(tmp_path / "downloads", tmp_path / "staging")
     assert problem and "Invalid cross-device link" in problem
 

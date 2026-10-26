@@ -1,22 +1,22 @@
-# flow — every host path comes from .env (copy .env.example to .env).
+# nasflow — every host path comes from .env (copy .env.example to .env).
 services:
-  flow:
+  nasflow:
     build: .
     image: nasflow:latest
-    container_name: flow
+    container_name: nasflow
     restart: unless-stopped
-    # Same owner as qBittorrent's files, so flow may hardlink them.
-    user: "${FLOW_PUID:-911}:${FLOW_PGID:-911}"
+    # Same owner as qBittorrent's files, so nasflow may hardlink them.
+    user: "${NASFLOW_PUID:-911}:${NASFLOW_PGID:-911}"
     environment:
-      FLOW_CONFIG: /config/config.toml
+      NASFLOW_CONFIG: /config/config.toml
     volumes:
       # ONE read-write mount covering both downloads and staging, at the same
       # path as on the host. Hardlinks cannot cross bind mounts: mounting
       # downloads and staging separately (or downloads :ro) makes every link
-      # fail with EXDEV. flow's own code confines writes to staging_root.
+      # fail with EXDEV. nasflow's own code confines writes to staging_root.
       # The media library is deliberately not mounted at all.
-      - ${FLOW_QB_ROOT}:${FLOW_QB_ROOT}
-      - ${FLOW_CONFIG_DIR}:/config
+      - ${NASFLOW_QB_ROOT}:${NASFLOW_QB_ROOT}
+      - ${NASFLOW_CONFIG_DIR}:/config
     ports:
-      # LAN only. flow has no authentication by design.
-      - "${FLOW_LAN_IP:?set FLOW_LAN_IP in .env}:${FLOW_PORT:-9987}:9987"
+      # LAN only. nasflow has no authentication by design.
+      - "${NASFLOW_LAN_IP:?set NASFLOW_LAN_IP in .env}:${NASFLOW_PORT:-9987}:9987"

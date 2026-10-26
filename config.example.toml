@@ -1,22 +1,22 @@
-# flow configuration — copy to config.toml and edit.
+# nasflow configuration — copy to config.toml and edit.
 #
 # config.toml is git-ignored because it holds your TMDB key and qBittorrent
-# password. Both can instead be supplied as FLOW_TMDB_API_KEY and
-# FLOW_QB_PASSWORD environment variables, which take precedence over this file.
+# password. Both can instead be supplied as NASFLOW_TMDB_API_KEY and
+# NASFLOW_QB_PASSWORD environment variables, which take precedence over this file.
 
-# Host path to qBittorrent's completed downloads. flow only ever reads here.
+# Host path to qBittorrent's completed downloads. nasflow only ever reads here.
 downloads_root = "/volume1/docker/qb/downloads"
 
-# Host path flow hardlinks into. Hardlinks fail with EXDEV across either of:
+# Host path nasflow hardlinks into. Hardlinks fail with EXDEV across either of:
 #   - Synology shares (each DSM shared folder is its own btrfs subvolume), or
 #   - Docker bind mounts (even two mounts of the same folder).
-# So staging_root and downloads_root must both live under FLOW_QB_ROOT, the
+# So staging_root and downloads_root must both live under NASFLOW_QB_ROOT, the
 # single folder docker-compose.yml mounts at the same path in the container.
 staging_root = "/volume1/docker/qb/staging"
 
-db_path = "/config/flow.db"
+db_path = "/config/nasflow.db"
 
-# qBittorrent WebUI. flow polls this; it never uses the AutoRun hook, because
+# qBittorrent WebUI. nasflow polls this; it never uses the AutoRun hook, because
 # the filesystem cannot distinguish a complete download from an incomplete one.
 qb_url = "http://192.168.4.126:8999"
 qb_username = "admin"
@@ -35,7 +35,7 @@ tmdb_english_language = "en-US"
 
 poll_interval_s = 60
 
-# Identification confidence. flow stops and asks rather than guessing when the
+# Identification confidence. nasflow stops and asks rather than guessing when the
 # best match scores below score_accept, or beats the runner-up by less than
 # score_gap.
 score_accept = 0.80
@@ -47,8 +47,8 @@ title_accept = 0.75
 # for confirmation even when the score is high. Set false to trust the score.
 require_english_title = true
 
-# Inside the container flow listens on all interfaces; docker-compose.yml
-# publishes it on FLOW_LAN_IP only. Do NOT expose it to the internet — flow
+# Inside the container nasflow listens on all interfaces; docker-compose.yml
+# publishes it on NASFLOW_LAN_IP only. Do NOT expose it to the internet — nasflow
 # has no authentication by design. Keep bind_port in step with the container
 # side of the compose port mapping (9987).
 bind_host = "0.0.0.0"

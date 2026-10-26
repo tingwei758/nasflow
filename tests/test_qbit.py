@@ -2,7 +2,7 @@ import httpx
 import pytest
 import respx
 
-from flow.qbit import QbitClient, QbitUnavailable
+from nasflow.qbit import QbitClient, QbitUnavailable
 
 BASE = "http://qb:8080"
 LOGIN = f"{BASE}/api/v2/auth/login"

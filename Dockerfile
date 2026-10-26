@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir . && rm -rf /app/src
 
 VOLUME /config
 EXPOSE 9987
-ENTRYPOINT ["python", "-m", "flow.main"]
+ENTRYPOINT ["python", "-m", "nasflow.main"]

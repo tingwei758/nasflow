@@ -83,10 +83,10 @@ _SECRET_FIELDS = {"tmdb_api_key", "qb_password"}
 
 # TOML key -> environment variable that overrides it.
 _ENV_OVERRIDES = {
-    "tmdb_api_key": "FLOW_TMDB_API_KEY",
-    "qb_password": "FLOW_QB_PASSWORD",
-    "qb_username": "FLOW_QB_USERNAME",
-    "qb_url": "FLOW_QB_URL",
+    "tmdb_api_key": "NASFLOW_TMDB_API_KEY",
+    "qb_password": "NASFLOW_QB_PASSWORD",
+    "qb_username": "NASFLOW_QB_USERNAME",
+    "qb_url": "NASFLOW_QB_URL",
 }
 
 _PATH_FIELDS = {"downloads_root", "staging_root", "db_path"}
@@ -111,7 +111,7 @@ def _check_disjoint(downloads: Path, staging: Path) -> None:
     """Refuse a staging root that overlaps the downloads.
 
     Downloads share a read-write mount with staging, so the linker's
-    confinement to staging_root is what keeps flow off the seeded files —
+    confinement to staging_root is what keeps nasflow off the seeded files —
     and staging is pruned of empty folders every cycle.
     """
     a, b = os.path.realpath(downloads), os.path.realpath(staging)
@@ -125,7 +125,7 @@ def _check_disjoint(downloads: Path, staging: Path) -> None:
 def load_config(path: Path) -> Config:
     """Read `path` as TOML and return a validated `Config`.
 
-    `FLOW_*` environment variables take precedence over file values, so secrets
+    `NASFLOW_*` environment variables take precedence over file values, so secrets
     can be supplied by the container runtime instead of written to disk.
     """
     with open(path, "rb") as fh:

@@ -1,4 +1,4 @@
-"""Stop or proceed — the one rule that keeps flow trustworthy.
+"""Stop or proceed — the one rule that keeps nasflow trustworthy.
 
 A wrong guess that lands in the library is worse than stopping, because the
 human may not notice it for months. A stop costs one click. So this errs
@@ -38,7 +38,7 @@ def decide(
     candidates: list[Candidate],
     cfg: Config,
 ) -> Decision:
-    """Decide whether flow may file this content on its own."""
+    """Decide whether nasflow may file this content on its own."""
     if content.kind == "unknown":
         return _stop(content.reason or "could not tell what this is")
 
