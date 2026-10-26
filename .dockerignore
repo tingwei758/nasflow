@@ -6,6 +6,7 @@ tests
 docs
 scripts
 config.toml
+data
 .env
 *.db
 **/__pycache__

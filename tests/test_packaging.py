@@ -62,9 +62,25 @@ def test_example_config_paths_live_inside_the_shared_mount():
         assert qb_root in Path(EXAMPLE[key]).parents, key
 
 
+def _config_mount_host() -> Path:
+    (host,) = [v.split(":")[0] for v in _list("volumes") if v.split(":")[1] == "/config"]
+    return Path(host)
+
+
 def test_config_folder_is_mounted_where_the_example_db_lives():
     assert Path(EXAMPLE["db_path"]).parent == Path("/config")
-    assert any(v.split(":")[1] == "/config" for v in _list("volumes"))
+    _config_mount_host()
+
+
+def test_settings_and_database_live_in_the_projects_data_folder():
+    """One folder on the NAS: code at its top, config.toml and nasflow.db in data/."""
+    assert _config_mount_host().name == "data"
+
+
+def test_data_folder_stays_out_of_git_and_the_image():
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").split()
+    assert "data/" in gitignore
+    assert "data" in DOCKERIGNORE.split()
 
 
 def test_port_is_published_on_the_lan_address_only():
