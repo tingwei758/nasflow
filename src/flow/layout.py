@@ -84,6 +84,10 @@ def plan_links(
 
     links: list[PlannedLink] = []
     for video in content.videos:
+        if ident.kind != "movie" and video.episode is None:
+            # A film or extra riding in a TV download (the Downton Abbey films
+            # in a series pack) is not an episode; decide() stops for it.
+            continue
         if ident.kind == "movie":
             target_dir = folder
             file_stem = stem

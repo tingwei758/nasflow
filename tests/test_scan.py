@@ -71,12 +71,15 @@ def test_single_file_torrent_content_path_is_the_file(tmp_path):
 
 
 def test_episode_markers_without_season(tmp_path):
+    # A real release folder as root: pytest's own tmp dir name ("..._s0")
+    # would itself read as a season tag.
+    root = tmp_path / "Eight.Hours.Dont.Make.a.Day.1972.E01-E05.CC.BluRay.1080p"
     make_files(
-        tmp_path,
+        root,
         [f"Eight.Hours.Dont.Make.a.Day.1972.E0{n}.CC.BluRay.mkv" for n in range(1, 6)],
         size=3_000_000_000,
     )
-    c = scan_content(tmp_path, MEDIA)
+    c = scan_content(root, MEDIA)
     assert c.kind == "tv"
     assert {v.episode for v in c.videos} == {1, 2, 3, 4, 5}
     assert all(v.season is None for v in c.videos)
@@ -156,3 +159,26 @@ def test_ep_inside_a_word_is_not_an_episode(tmp_path):
     root = tmp_path / "Deep.Blue.Sea.1999"
     make_file(root / "Deep.Blue.Sea.1999.Sleepless.EP.Cut.1080p.mkv", BIG)
     assert scan_content(root, MediaConfig()).kind == "movie"
+
+
+# ---- review: the season of a file without Sxx comes from its folders --------
+
+def test_bare_episode_takes_its_season_from_the_enclosing_folder(tmp_path):
+    root = tmp_path / "Show.S02.2024.1080p.WEB-DL"
+    make_file(root / "Show.EP15.mkv", BIG)
+    make_file(root / "Show.EP16.mkv", BIG)
+    assert {(v.season, v.episode) for v in scan_content(root, MEDIA).videos} == {(2, 15), (2, 16)}
+
+
+def test_season_range_folder_names_no_season(tmp_path):
+    root = tmp_path / "Show.S01-S03.Complete"
+    make_file(root / "Show.E01.mkv", BIG)
+    make_file(root / "Show.E02.mkv", BIG)
+    assert {v.season for v in scan_content(root, MEDIA).videos} == {None}
+
+
+def test_nearest_folder_season_wins(tmp_path):
+    root = tmp_path / "Show.S01-S02.Pack"
+    make_file(root / "Show.S02.Disc" / "Show.E03.mkv", BIG)
+    make_file(root / "Show.S02.Disc" / "Show.E04.mkv", BIG)
+    assert {v.season for v in scan_content(root, MEDIA).videos} == {2}

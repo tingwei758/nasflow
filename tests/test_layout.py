@@ -129,3 +129,15 @@ def test_source_paths_are_the_scanned_files():
 def test_unknown_content_plans_nothing():
     c = content("unknown", [video("A.mkv"), video("B.mkv")])
     assert plan_links(c, ident("X", 2000, "movie"), STAGING, LAYOUT) == []
+
+
+# ---- review: a video with no episode marker is never filed as an episode ----
+
+def test_unmarked_video_in_a_tv_download_is_not_planned():
+    """唐顿庄园S01-S06 ships the Downton Abbey films; they are not S01E00."""
+    episode = VideoFile(Path("/dl/pack/Downton.Abbey.S01E01.mkv"), 2_000_000_000, 1, 1)
+    film = VideoFile(Path("/dl/pack/Downton.Abbey.2019.1080p.mkv"), 9_000_000_000, None, None)
+    pack = Content(root=Path("/dl/pack"), kind="tv", videos=[episode, film], subtitles=[])
+    links = plan_links(pack, ident("唐顿庄园", 2010, "tv"), STAGING, LAYOUT)
+    assert [l.source for l in links] == [episode.path]
+    assert not any("E00" in str(l.dest) for l in links)

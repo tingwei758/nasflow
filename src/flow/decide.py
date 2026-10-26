@@ -43,6 +43,16 @@ def decide(
     if content.kind == "unknown":
         return _stop(content.reason or "could not tell what this is")
 
+    if content.kind == "tv":
+        unmarked = [v for v in content.videos if v.episode is None]
+        if unmarked:
+            many = len(unmarked) > 1
+            return _stop(
+                f"{len(unmarked)} video{'s' if many else ''} without "
+                f"{'' if many else 'an '}episode marker{'s' if many else ''}, which will "
+                f"not be filed (e.g. {unmarked[0].path.name})"
+            )
+
     if not candidates:
         return _stop("no TMDB match")
 

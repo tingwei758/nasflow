@@ -114,3 +114,17 @@ def test_gap_exactly_at_threshold_links_despite_float_error():
 def test_score_exactly_at_accept_links_despite_float_error():
     assert 0.7 + 0.1 < 0.80  # the trap: 0.7999999999999999
     assert decide(movie_content, parsed_pegasus, [c(0.7 + 0.1)], CFG).action == "link"
+
+
+def test_tv_download_with_unmarked_videos_stops_and_names_them():
+    tv = Content(
+        root=Path("/dl"), kind="tv", subtitles=[], reason="",
+        videos=[
+            VideoFile(Path("/dl/Downton.Abbey.S01E01.mkv"), 2_000_000_000, 1, 1),
+            VideoFile(Path("/dl/Downton.Abbey.2019.1080p.mkv"), 9_000_000_000, None, None),
+        ],
+    )
+    d = decide(tv, ParsedName("Downton Abbey", "唐顿庄园", 2010, None, "x"), [c(0.99)], CFG)
+    assert d.action == "stop"
+    assert "1 video without an episode marker" in d.reason
+    assert "Downton.Abbey.2019.1080p.mkv" in d.reason

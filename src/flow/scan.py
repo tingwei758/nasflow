@@ -26,6 +26,8 @@ _SXXEXX_RE = re.compile(r"(?:^|[^A-Za-z0-9])S(\d{1,2})[._\- ]?E(\d{1,3})(?![0-9]
 _EXX_RE = re.compile(r"(?:^|[^A-Za-z0-9])EP?(\d{1,3})(?![0-9])", re.IGNORECASE)
 # A season tag standing apart from the episode: `...S02.2024.Chinese.EP15...`.
 _SEASON_ONLY_RE = re.compile(r"(?:^|[^A-Za-z0-9])S(\d{1,2})(?![0-9A-Za-z])", re.IGNORECASE)
+# A folder spanning seasons (Show.S01-S03) names no single season.
+_SEASON_RANGE_RE = re.compile(r"(?:^|[^A-Za-z0-9])S\d{1,2}\s*-\s*S?\d{1,2}(?![0-9])", re.IGNORECASE)
 
 
 def _is_excluded(name: str, media: MediaConfig) -> bool:
@@ -78,7 +80,7 @@ def scan_content(path: Path, media: MediaConfig) -> Content:
             reason="no video files found",
         )
 
-    videos = _mark_episodes(videos)
+    videos = _mark_episodes(videos, path)
 
     if any(v.episode is not None for v in videos):
         return Content(root=path, kind="tv", videos=videos, subtitles=subtitles,
@@ -92,15 +94,33 @@ def scan_content(path: Path, media: MediaConfig) -> Content:
     )
 
 
-def _mark_episodes(videos: list[VideoFile]) -> list[VideoFile]:
+def _season_from_folders(video: Path, root: Path) -> int | None:
+    """The single season named by the nearest enclosing folder, up to `root`.
+
+    A season-range folder (S01-S03) answers "unknown" and stops the search:
+    going further up could only find a broader, less trustworthy name.
+    """
+    for folder in video.parents:
+        if _SEASON_RANGE_RE.search(folder.name):
+            return None
+        tag = _SEASON_ONLY_RE.search(folder.name)
+        if tag:
+            return int(tag.group(1))
+        if folder == root or root not in folder.parents:
+            return None
+    return None
+
+
+def _mark_episodes(videos: list[VideoFile], root: Path) -> list[VideoFile]:
     """Attach season/episode from each file's own name.
 
     Two passes: `SxxExx` first, and only if no file in the whole content matches
     it, fall back to a bare `Exx`/`EPxx`. The fallback is content-wide so that a
     stray `E` token in one filename cannot turn a movie into a show. In the
-    fallback the season comes from a separate `Sxx` in the same filename when
-    there is one, and is otherwise unknown — never assumed to be 1 here, since
-    `...S02...EP15` filed as Season 1 would be silently wrong.
+    fallback the season comes from a separate `Sxx` in the same filename, else
+    from the nearest enclosing folder (`Show.S02.../Show.EP15.mkv`), and is
+    otherwise unknown — never assumed to be 1 here, since a Season 2 episode
+    filed as Season 1 would be silently wrong.
     """
     marked = []
     for video in videos:
@@ -119,15 +139,9 @@ def _mark_episodes(videos: list[VideoFile]) -> list[VideoFile]:
     for video in videos:
         match = _EXX_RE.search(video.path.name)
         if match:
-            season = _SEASON_ONLY_RE.search(video.path.name)
-            fallback.append(
-                VideoFile(
-                    video.path,
-                    video.size,
-                    int(season.group(1)) if season else None,
-                    int(match.group(1)),
-                )
-            )
+            tag = _SEASON_ONLY_RE.search(video.path.name)
+            season = int(tag.group(1)) if tag else _season_from_folders(video.path, root)
+            fallback.append(VideoFile(video.path, video.size, season, int(match.group(1))))
         else:
             fallback.append(video)
     return fallback
