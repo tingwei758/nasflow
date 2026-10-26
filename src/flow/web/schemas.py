@@ -20,6 +20,15 @@ STATE_TO_COLUMN = {
 
 COLUMNS = ("downloaded", "identifying", "needs_you", "ready")
 
+# Display text lives with the column keys, so the front end renders whatever
+# the server sends and never carries its own copy.
+COLUMN_LABELS = {
+    "downloaded": "Downloaded",
+    "identifying": "Identifying",
+    "needs_you": "Needs you",
+    "ready": "Ready to move",
+}
+
 
 class CandidateOut(BaseModel):
     tmdb_id: int
@@ -45,6 +54,9 @@ class ItemOut(BaseModel):
     video_count: int = 0
     total_bytes: int = 0
     classification_reason: str = ""
+    parsed_title_en: str | None = None
+    parsed_title_zh: str | None = None
+    parsed_year: int | None = None
 
 
 class ResolveIn(BaseModel):
@@ -53,3 +65,17 @@ class ResolveIn(BaseModel):
 
 class SearchOut(BaseModel):
     candidates: list[CandidateOut]
+
+
+class ColumnOut(BaseModel):
+    key: str
+    label: str
+
+
+class MetaOut(BaseModel):
+    columns: list[ColumnOut]
+    poster_base: str
+
+
+class PreviewOut(BaseModel):
+    paths: list[str]

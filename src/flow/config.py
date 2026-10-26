@@ -53,6 +53,7 @@ class Config:
     tmdb_api_key: str
     container_downloads_prefix: str = "/downloads"
     tmdb_language: str = "zh-CN"
+    tmdb_image_base: str = "https://image.tmdb.org/t/p/w154"
     poll_interval_s: int = 60
     score_accept: float = 0.80
     score_gap: float = 0.15

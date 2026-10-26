@@ -1,1 +1,24 @@
-<!doctype html><title>flow</title>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>flow</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/board.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>flow</h1>
+    <span id="status" class="status" role="status"></span>
+  </header>
+
+  <main id="board" class="cols" aria-live="polite"></main>
+
+  <noscript>
+    The board needs JavaScript. The raw state is at <a href="/api/board">/api/board</a>.
+  </noscript>
+
+  <dialog id="resolve" class="rp" aria-labelledby="rp-name"></dialog>
+</body>
+</html>
