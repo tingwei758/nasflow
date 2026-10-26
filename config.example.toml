@@ -7,16 +7,18 @@
 # Host path to qBittorrent's completed downloads. flow only ever reads here.
 downloads_root = "/volume1/docker/qb/downloads"
 
-# Host path flow hardlinks into. MUST be on the same Synology share as
-# downloads_root — hardlinks cannot cross shares (each DSM shared folder is a
-# separate btrfs subvolume, so `ln` fails with EXDEV).
+# Host path flow hardlinks into. Hardlinks fail with EXDEV across either of:
+#   - Synology shares (each DSM shared folder is its own btrfs subvolume), or
+#   - Docker bind mounts (even two mounts of the same folder).
+# So staging_root and downloads_root must both live under FLOW_QB_ROOT, the
+# single folder docker-compose.yml mounts at the same path in the container.
 staging_root = "/volume1/docker/qb/staging"
 
 db_path = "/config/flow.db"
 
 # qBittorrent WebUI. flow polls this; it never uses the AutoRun hook, because
 # the filesystem cannot distinguish a complete download from an incomplete one.
-qb_url = "http://qbittorrent:8080"
+qb_url = "http://192.168.4.126:8999"
 qb_username = "admin"
 qb_password = "change-me"
 
@@ -39,8 +41,10 @@ score_gap = 0.15
 # for confirmation even when the score is high. Set false to trust the score.
 require_english_title = true
 
-# Serve the board on the LAN only. Do NOT publish this port to the internet —
-# flow has no authentication by design.
+# Inside the container flow listens on all interfaces; docker-compose.yml
+# publishes it on FLOW_LAN_IP only. Do NOT expose it to the internet — flow
+# has no authentication by design. Keep bind_port in step with the container
+# side of the compose port mapping (8080).
 bind_host = "0.0.0.0"
 bind_port = 8080
 

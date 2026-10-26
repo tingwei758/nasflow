@@ -16,8 +16,8 @@ from .routes import build_router
 _STATIC = Path(__file__).parent / "static"
 
 
-def create_app(pipeline, store, cfg) -> FastAPI:
-    app = FastAPI(title="flow", docs_url=None, redoc_url=None)
+def create_app(pipeline, store, cfg, lifespan=None) -> FastAPI:
+    app = FastAPI(title="flow", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.include_router(build_router(pipeline, store, cfg))
     app.mount("/", StaticFiles(directory=str(_STATIC), html=True), name="static")
     return app

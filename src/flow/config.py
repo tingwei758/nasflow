@@ -15,6 +15,9 @@ from typing import Any
 
 _MASK = "***"
 
+# Where the container image expects its config volume.
+DEFAULT_CONFIG_PATH = Path("/config/config.toml")
+
 
 @dataclass(frozen=True)
 class LayoutConfig:
