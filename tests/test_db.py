@@ -177,3 +177,10 @@ def test_flags_default_to_unset_and_persist(tmp_path):
     s.set_flag("baseline_taken")
     s.close()
     assert Store(tmp_path / "nasflow.db").get_flag("baseline_taken") is True
+
+
+def test_is_empty_until_an_item_is_recorded(tmp_path):
+    s = store(tmp_path)
+    assert s.is_empty() is True
+    s.upsert_discovered(torrent())
+    assert s.is_empty() is False

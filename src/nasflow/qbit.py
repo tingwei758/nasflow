@@ -29,6 +29,10 @@ _FINISHED_STATES = frozenset(
     }
 )
 
+# States where qBittorrent is still settling a torrent's data: rechecking it
+# (including the recheck of every torrent after a restart) or moving it.
+_IN_FLIGHT_PREFIXES = ("checking", "moving")
+
 
 class QbitUnavailable(RuntimeError):
     """qBittorrent could not be reached or refused us. Retryable."""
@@ -80,8 +84,7 @@ class QbitClient:
         except httpx.HTTPError as exc:
             raise QbitUnavailable(f"torrent list request failed: {exc}") from exc
 
-    def completed_torrents(self) -> list[Torrent]:
-        """Every torrent whose data is fully written and settled."""
+    def _list(self) -> list[dict]:
         if not self._authenticated:
             self._login()
 
@@ -100,12 +103,23 @@ class QbitClient:
 
         if not isinstance(payload, list):
             raise QbitUnavailable("torrent list was not a list")
+        return payload
 
+    def completed_torrents(self) -> list[Torrent]:
+        """Every torrent whose data is fully written and settled."""
         return [
             _to_torrent(raw)
-            for raw in payload
+            for raw in self._list()
             if float(raw.get("progress", 0)) >= 1.0 and raw.get("state") in _FINISHED_STATES
         ]
+
+    def settling(self) -> bool:
+        """Whether any torrent is still being checked or moved.
+
+        Right after qBittorrent starts, every torrent is rechecked and none of
+        them counts as completed yet, so a list taken then is not the whole set.
+        """
+        return any(str(raw.get("state", "")).startswith(_IN_FLIGHT_PREFIXES) for raw in self._list())
 
 
 def _to_torrent(raw: dict) -> Torrent:

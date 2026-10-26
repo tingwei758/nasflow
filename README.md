@@ -34,7 +34,9 @@ Some things to expect:
 - **The board starts empty.** The first time nasflow reaches qBittorrent, it
   records everything already finished as done and leaves it alone. Only
   downloads that finish after that are filed. To file the existing ones too, set
-  `skip_existing_on_first_run = false` before the first start.
+  `skip_existing_on_first_run = false` before the first start. If qBittorrent
+  is still checking its torrents (as it does after a restart), nasflow waits
+  for it to finish first. A database that already has items is kept as it is.
 - **A card stops once and waits.** When nasflow stops because it isn't sure, it
   doesn't ask TMDB again until you act. It *does* retry stops that can clear
   on their own: TMDB being unreachable, or a destination already being taken.

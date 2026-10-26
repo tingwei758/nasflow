@@ -74,6 +74,8 @@ class Pipeline:
             return
 
         if self.cfg.skip_existing_on_first_run and not self.store.get_flag(_BASELINE_FLAG):
+            # Until the baseline is taken (it may wait on qBittorrent), nothing
+            # is processed: anything processed now would escape it.
             self._take_baseline(torrents)
             return
 
@@ -148,7 +150,29 @@ class Pipeline:
 
     @_serialized
     def _take_baseline(self, torrents) -> None:
-        """Settle everything finished before nasflow's first run, filing nothing."""
+        """Settle everything finished before nasflow's first run, filing nothing.
+
+        Takes nothing while qBittorrent is still checking or moving torrents:
+        those are missing from `torrents` and would otherwise be filed later as
+        if they were new.
+        """
+        if not self.store.is_empty():
+            # This database already tracks items: it predates the baseline, or
+            # ran with skip_existing_on_first_run off. Its items carry real
+            # states and human decisions that must not be overwritten.
+            self.store.set_flag(_BASELINE_FLAG)
+            log.info("database already tracks items: no first-run baseline needed")
+            return
+
+        try:
+            settling = self.qbit.settling()
+        except QbitUnavailable as exc:
+            log.warning("qBittorrent unavailable: %s", exc)
+            return
+        if settling:
+            log.info("first run: qBittorrent is still checking torrents; baseline waits")
+            return
+
         for torrent in torrents:
             self.store.upsert_discovered(torrent)
             self.store.set_state(torrent.hash, "done", reason="finished before nasflow started")

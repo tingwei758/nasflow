@@ -107,6 +107,10 @@ class Store:
             self._conn.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
 
     @_locked
+    def is_empty(self) -> bool:
+        return self._conn.execute("SELECT 1 FROM items LIMIT 1").fetchone() is None
+
+    @_locked
     def upsert_discovered(self, torrent: Torrent) -> None:
         """Record a torrent we have seen, without disturbing prior decisions."""
         now = time.time()

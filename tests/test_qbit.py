@@ -117,3 +117,14 @@ def test_password_never_appears_in_exception_text(client):
         with pytest.raises(QbitUnavailable) as exc:
             client.completed_torrents()
         assert "pw" not in str(exc.value).split()
+
+
+def test_settling_while_any_torrent_is_checked_or_moved(client):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.post(LOGIN).respond(200, text="Ok.")
+        info = mock.get(INFO)
+        for state in ("checkingResumeData", "checkingUP", "checkingDL", "moving"):
+            info.respond(200, json=[torrent("a"), torrent("b", 1.0, state)])
+            assert client.settling() is True
+        info.respond(200, json=[torrent("a"), torrent("b", 0.4, "downloading")])
+        assert client.settling() is False

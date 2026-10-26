@@ -22,11 +22,17 @@ class FakeQbit:
     def __init__(self, torrents=()):
         self.torrents = list(torrents)
         self.fail = False
+        self.checking = False
 
     def completed_torrents(self):
         if self.fail:
             raise QbitUnavailable("down")
         return list(self.torrents)
+
+    def settling(self):
+        if self.fail:
+            raise QbitUnavailable("down")
+        return self.checking
 
 
 class FakeTmdb:
@@ -646,3 +652,36 @@ def test_baseline_is_taken_once_per_database(env):
     qbit.torrents = [new]
     _first_run(env).poll_once()  # e.g. after a container restart
     assert store.get(new.hash).state == "ready"
+
+
+def test_baseline_waits_while_qbittorrent_is_still_checking(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    p = _first_run(env)
+    early = make_movie(downloads, PEGASUS)
+    qbit.torrents, qbit.checking = [], True  # just restarted: nothing counts as completed yet
+    p.poll_once()
+    assert store.get(early.hash) is None
+    qbit.torrents, qbit.checking = [early], False
+    p.poll_once()
+    assert store.get(early.hash).state == "done"
+    assert not any(staging.rglob("*.mkv"))
+
+
+def test_upgrading_an_existing_database_keeps_every_item_as_it_was(env):
+    cfg, store, qbit, tmdb, downloads, staging = env
+    ready = make_movie(downloads, PEGASUS)
+    ignored = make_movie(downloads, "Not.A.Movie.2020.1080p")
+    waiting = make_movie(downloads, "Some.Unknown.Film.2021.1080p")
+    for t in (ready, ignored, waiting):
+        store.upsert_discovered(t)
+    store.set_state(ready.hash, "ready")
+    store.set_state(ignored.hash, "ignored", reason="marked not media")
+    store.set_resolution(waiting.hash, 1)
+    store.set_state(waiting.hash, "needs_you", reason="2 close matches")
+    qbit.torrents = [ready, ignored, waiting]
+    _first_run(env).poll_once()
+    assert store.get(ready.hash).state == "ready"
+    assert store.get(ignored.hash).state == "ignored"
+    assert store.get(waiting.hash).state == "needs_you"
+    assert store.get(waiting.hash).chosen_tmdb_id == 1
+    assert store.get_flag("baseline_taken") is True
