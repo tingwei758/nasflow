@@ -8,8 +8,10 @@ not re-ask a question the human already answered.
 
 from __future__ import annotations
 
+import functools
 import json
 import sqlite3
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -37,6 +39,18 @@ CREATE TABLE IF NOT EXISTS items (
 """
 
 
+def _locked(method):
+    """Serialise access: the poll thread and the web threadpool share one
+    connection, and sqlite3 connections are not safe for concurrent use."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 @dataclass(frozen=True)
 class Item:
     hash: str
@@ -55,15 +69,18 @@ class Store:
     def __init__(self, path: Path):
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
+    @_locked
     def close(self) -> None:
         self._conn.close()
 
+    @_locked
     def upsert_discovered(self, torrent: Torrent) -> None:
         """Record a torrent we have seen, without disturbing prior decisions."""
         now = time.time()
@@ -80,6 +97,7 @@ class Store:
                 (torrent.hash, torrent.name, torrent.content_path, now, now),
             )
 
+    @_locked
     def set_state(self, hash_: str, state: str, reason: str | None = None) -> None:
         if state not in STATES:
             raise ValueError(f"unknown state {state!r}")
@@ -89,6 +107,7 @@ class Store:
                 (state, reason or "", time.time(), hash_),
             )
 
+    @_locked
     def set_candidates(self, hash_: str, candidates: list[Candidate]) -> None:
         payload = json.dumps([asdict(c) for c in candidates], ensure_ascii=False)
         with self._conn:
@@ -97,6 +116,7 @@ class Store:
                 (payload, time.time(), hash_),
             )
 
+    @_locked
     def get_candidates(self, hash_: str) -> list[Candidate]:
         row = self._conn.execute(
             "SELECT candidates_json FROM items WHERE hash = ?", (hash_,)
@@ -105,6 +125,7 @@ class Store:
             return []
         return [Candidate(**raw) for raw in json.loads(row["candidates_json"])]
 
+    @_locked
     def set_resolution(self, hash_: str, tmdb_id: int) -> None:
         with self._conn:
             self._conn.execute(
@@ -112,6 +133,7 @@ class Store:
                 (tmdb_id, time.time(), hash_),
             )
 
+    @_locked
     def set_kind(self, hash_: str, kind: str) -> None:
         with self._conn:
             self._conn.execute(
@@ -119,6 +141,7 @@ class Store:
                 (kind, time.time(), hash_),
             )
 
+    @_locked
     def set_linked(self, hash_: str, dest_root: str) -> None:
         with self._conn:
             self._conn.execute(
@@ -127,14 +150,17 @@ class Store:
                 (dest_root, time.time(), hash_),
             )
 
+    @_locked
     def get(self, hash_: str) -> Item | None:
         row = self._conn.execute("SELECT * FROM items WHERE hash = ?", (hash_,)).fetchone()
         return _to_item(row) if row else None
 
+    @_locked
     def all_items(self) -> list[Item]:
         rows = self._conn.execute("SELECT * FROM items ORDER BY updated_at DESC").fetchall()
         return [_to_item(r) for r in rows]
 
+    @_locked
     def items_in(self, states: list[str]) -> list[Item]:
         if not states:
             return []

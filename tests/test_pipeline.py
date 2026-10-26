@@ -351,3 +351,39 @@ def test_moving_only_the_season_folder_still_reaches_done(env):
     shutil.rmtree(staging / "TV Shows/黑镜 (2011)/Season 6")
     p.reconcile_staging()
     assert store.get(t.hash).state == "done"
+
+
+def test_human_resolve_is_not_overwritten_by_a_concurrent_poll(env):
+    """A poll mid-way through an item must not clobber a choice made meanwhile."""
+    import threading
+
+    cfg, store, qbit, tmdb, downloads, staging = env
+    t = make_movie(downloads, LONGMEN)
+    qbit.torrents = [t]
+    tmdb.results = {"龙门飞甲": [cand(72113, "龙门飞甲", "Dragon Gate", 2011, 0.94)]}
+    p = build(cfg, store, qbit, tmdb)
+    p.poll_once()  # -> needs_you, candidates stored
+    store.set_state(t.hash, "discovered")  # make the next poll pick it up again
+
+    entered, release = threading.Event(), threading.Event()
+    real_search = tmdb.search
+
+    def slow_search(parsed, kind):
+        entered.set()
+        release.wait(5)
+        return real_search(parsed, kind)
+
+    tmdb.search = slow_search
+    poller = threading.Thread(target=p.poll_once)
+    poller.start()
+    assert entered.wait(5)
+
+    resolver = threading.Thread(target=p.resolve, args=(t.hash, 72113))
+    resolver.start()
+    resolver.join(0.3)
+    release.set()
+    poller.join(5)
+    resolver.join(5)
+
+    assert store.get(t.hash).state == "ready"
+    assert store.get(t.hash).chosen_tmdb_id == 72113

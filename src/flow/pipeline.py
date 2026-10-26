@@ -8,7 +8,9 @@ down, a destination being occupied, a torrent vanishing mid-poll.
 
 from __future__ import annotations
 
+import functools
 import logging
+import threading
 from pathlib import Path
 
 from .config import Config
@@ -29,12 +31,28 @@ log = logging.getLogger(__name__)
 _SETTLED = frozenset({"ready", "done", "ignored"})
 
 
+def _serialized(method):
+    """One item-changing operation at a time.
+
+    The poll loop and the board's request threads both drive the pipeline. A
+    poll that finished after a human's resolve would overwrite their choice.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Pipeline:
     def __init__(self, config: Config, store: Store, qbit, tmdb):
         self.cfg = config
         self.store = store
         self.qbit = qbit
         self.tmdb = tmdb
+        self._lock = threading.RLock()
 
     # ---- driving ---------------------------------------------------------
 
@@ -50,11 +68,15 @@ class Pipeline:
             self.store.upsert_discovered(torrent)
 
         for torrent in torrents:
-            item = self.store.get(torrent.hash)
-            if item is not None and item.state in _SETTLED:
-                continue
-            self.process(torrent.hash)
+            # Locked per item, not per poll: a human's click waits for at most
+            # one item's TMDB lookup, and sees the state as it is after it.
+            with self._lock:
+                item = self.store.get(torrent.hash)
+                if item is not None and item.state in _SETTLED:
+                    continue
+                self.process(torrent.hash)
 
+    @_serialized
     def process(self, hash_: str) -> None:
         """Identify one item and either file it or stop for a human."""
         item = self.store.get(hash_)
@@ -100,6 +122,7 @@ class Pipeline:
 
     # ---- human actions ---------------------------------------------------
 
+    @_serialized
     def resolve(self, hash_: str, tmdb_id: int) -> None:
         """File this item as the entry the human picked."""
         item = self.store.get(hash_)
@@ -117,11 +140,13 @@ class Pipeline:
 
         self._link_chosen(hash_, scan_content(source, self.cfg.media), tmdb_id)
 
+    @_serialized
     def ignore(self, hash_: str) -> None:
         self.store.set_state(hash_, "ignored", reason="marked not media")
 
     # ---- staging reconciliation -----------------------------------------
 
+    @_serialized
     def reconcile_staging(self) -> None:
         """Notice what the human has moved out, without being told.
 

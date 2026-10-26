@@ -113,3 +113,31 @@ def test_name_and_content_path_are_stored(tmp_path):
     item = s.get("h1")
     assert item.name == "黑镜.Black.Mirror.S06"
     assert item.content_path == "/downloads/黑镜.Black.Mirror.S06"
+
+
+def test_store_survives_concurrent_use_from_several_threads(tmp_path):
+    """The poll loop and the web threadpool share one Store."""
+    import threading
+
+    s = store(tmp_path)
+    errors: list[BaseException] = []
+
+    def worker(n):
+        try:
+            for i in range(150):
+                h = f"t{n}-{i % 5}"
+                s.upsert_discovered(torrent(h, h))
+                s.set_state(h, "needs_you", reason="x")
+                s.set_candidates(h, [candidate(i)])
+                s.get_candidates(h)
+                s.all_items()
+        except BaseException as exc:  # noqa: BLE001 - surface anything
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert len(s.all_items()) == 40
