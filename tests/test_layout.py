@@ -139,5 +139,5 @@ def test_unmarked_video_in_a_tv_download_is_not_planned():
     film = VideoFile(Path("/dl/pack/Downton.Abbey.2019.1080p.mkv"), 9_000_000_000, None, None)
     pack = Content(root=Path("/dl/pack"), kind="tv", videos=[episode, film], subtitles=[])
     links = plan_links(pack, ident("唐顿庄园", 2010, "tv"), STAGING, LAYOUT)
-    assert [l.source for l in links] == [episode.path]
-    assert not any("E00" in str(l.dest) for l in links)
+    assert [link.source for link in links] == [episode.path]
+    assert not any("E00" in str(link.dest) for link in links)

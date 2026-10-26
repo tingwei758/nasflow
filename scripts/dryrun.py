@@ -74,7 +74,8 @@ def evaluate(path: Path, cfg: Config, tmdb) -> Row:
     decision = decide(content, parsed, candidates, cfg)
     row.action, row.reason = decision.action, decision.reason
     if decision.action == "link":
-        links = plan_links(content, Identification(decision.candidate, kind), cfg.staging_root, cfg.layout)
+        ident = Identification(decision.candidate, kind)
+        links = plan_links(content, ident, cfg.staging_root, cfg.layout)
         row.destinations = [str(link.dest) for link in links]
     return row
 

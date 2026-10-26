@@ -16,7 +16,6 @@ from typing import Literal
 from .config import Config
 from .models import Candidate, Content, ParsedName
 
-
 # Scores are rounded to 4 places when computed; compare at the same precision,
 # or 1.00 - 0.90 (= 0.0999...) fails a 0.10 gap and boundaries turn arbitrary.
 _PRECISION = 4

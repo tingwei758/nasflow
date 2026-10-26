@@ -6,8 +6,7 @@ flow sees the same files at a host path. Nothing else lives in this module.
 
 from __future__ import annotations
 
-from pathlib import PurePosixPath
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def _normalized_prefix(prefix: str) -> PurePosixPath:

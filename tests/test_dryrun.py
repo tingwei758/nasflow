@@ -4,7 +4,17 @@ from pathlib import Path
 
 from flow.config import Config
 
-from .test_pipeline import BM_S06, JUNK, LONGMEN, PEGASUS, FakeTmdb, cand, make_junk, make_movie, make_season
+from .test_pipeline import (
+    BM_S06,
+    JUNK,
+    LONGMEN,
+    PEGASUS,
+    FakeTmdb,
+    cand,
+    make_junk,
+    make_movie,
+    make_season,
+)
 
 _SPEC = importlib.util.spec_from_file_location(
     "dryrun", Path(__file__).resolve().parents[1] / "scripts" / "dryrun.py"
