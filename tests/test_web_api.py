@@ -131,3 +131,37 @@ def test_ignore_refuses_an_item_that_is_not_waiting_for_you(api):
     client.post(f"/api/items/{t.hash}/resolve", json={"tmdb_id": 72113})
     assert client.post(f"/api/items/{t.hash}/ignore").status_code == 409
     assert store.get(t.hash).state == "ready"
+
+
+def test_health_before_any_check_has_run_is_ok_and_unknown(api):
+    body = api[0].get("/api/health").json()
+    assert body["ok"] is True
+    assert {c["status"] for c in body["checks"]} == {"unknown"}
+    assert all(c["checked_at"] is None for c in body["checks"])
+
+
+def test_health_reflects_recorded_results(api, health):
+    health.record("qbittorrent", "fail", "login rejected: check qb_password", 1761500000.0)
+    body = api[0].get("/api/health").json()
+    assert body["ok"] is False
+    qb = next(c for c in body["checks"] if c["name"] == "qbittorrent")
+    assert qb == {"name": "qbittorrent", "label": "qBittorrent", "status": "fail",
+                  "detail": "login rejected: check qb_password", "checked_at": 1761500000.0}
+
+
+def test_health_endpoint_runs_no_probe(api):
+    client, _, _, qbit, tmdb, _, _ = api
+    client.get("/api/health")
+    assert qbit.calls == [] and tmdb.calls == []
+
+
+def test_health_exposes_no_secret(api, health):
+    health.record("qbittorrent", "fail", "login as u:super-secret rejected", 1.0)
+    health.record("tmdb", "fail", "GET /configuration?api_key=key-123 failed", 2.0)
+    response = api[0].get("/api/health")
+    assert "super-secret" not in response.text and "key-123" not in response.text
+
+
+def test_health_labels_come_from_the_server(api):
+    labels = [c["label"] for c in api[0].get("/api/health").json()["checks"]]
+    assert "qBittorrent" in labels and "TMDB" in labels

@@ -24,8 +24,10 @@ class FakeQbit:
         self.fail = False
         self.checking = False
         self.version = "v4.6.5"
+        self.calls = []  # health probes only
 
     def app_version(self):
+        self.calls.append("app_version")
         if self.fail:
             raise QbitUnavailable("down")
         return self.version
@@ -45,6 +47,7 @@ class FakeTmdb:
     def __init__(self, results=None):
         self.results = results or {}
         self.fail = False
+        self.calls = []  # health probes only
 
     def search(self, parsed, kind):
         if self.fail:
@@ -60,6 +63,7 @@ class FakeTmdb:
         return None
 
     def ping(self):
+        self.calls.append("ping")
         if self.fail:
             raise TmdbUnavailable("down")
 

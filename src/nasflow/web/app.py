@@ -16,8 +16,8 @@ from .routes import build_router
 _STATIC = Path(__file__).parent / "static"
 
 
-def create_app(pipeline, store, cfg, lifespan=None) -> FastAPI:
+def create_app(pipeline, store, cfg, lifespan=None, health=None) -> FastAPI:
     app = FastAPI(title="nasflow", docs_url=None, redoc_url=None, lifespan=lifespan)
-    app.include_router(build_router(pipeline, store, cfg))
+    app.include_router(build_router(pipeline, store, cfg, health))
     app.mount("/", StaticFiles(directory=str(_STATIC), html=True), name="static")
     return app
