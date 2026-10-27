@@ -79,3 +79,17 @@ class MetaOut(BaseModel):
 
 class PreviewOut(BaseModel):
     paths: list[str]
+
+
+class HealthCheckOut(BaseModel):
+    name: str
+    label: str
+    status: str  # "ok" | "fail" | "unknown"
+    detail: str
+    checked_at: float | None
+
+
+class HealthOut(BaseModel):
+    # False only on an actual failure: a check nobody has run yet is not red.
+    ok: bool
+    checks: list[HealthCheckOut]

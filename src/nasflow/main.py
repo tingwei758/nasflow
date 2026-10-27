@@ -15,7 +15,9 @@ from fastapi import FastAPI
 
 from .config import DEFAULT_CONFIG_PATH, Config, load_config
 from .db import Store
+from .health import HealthRegistry, build_checks, health_loop
 from .linker import probe_hardlink
+from .pathmap import check_same_filesystem
 from .pipeline import Pipeline
 from .qbit import QbitClient
 from .redact import RedactingFormatter
@@ -55,21 +57,25 @@ def build_app(cfg: Config, *, start_polling: bool = True) -> FastAPI:
         ),
     )
 
+    # The board reads the last snapshot; the checker fills it in the background.
+    health = HealthRegistry(build_checks(cfg, store, pipeline), secrets=cfg.secrets())
+
     @contextlib.asynccontextmanager
     async def lifespan(_app):
-        task = None
+        tasks = []
         if start_polling:
-            task = asyncio.create_task(poll_loop(pipeline, cfg.poll_interval_s))
+            tasks.append(asyncio.create_task(poll_loop(pipeline, cfg.poll_interval_s)))
+            tasks.append(asyncio.create_task(health_loop(health, tick_s=cfg.health_tick_s)))
         try:
             yield
         finally:
-            if task is not None:
+            for task in tasks:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             store.close()
 
-    return create_app(pipeline, store, cfg, lifespan=lifespan)
+    return create_app(pipeline, store, cfg, lifespan=lifespan, health=health)
 
 
 def configure_logging() -> None:
@@ -98,25 +104,6 @@ def resolve_config_path(argv: list[str]) -> Path:
     return Path(env) if env else DEFAULT_CONFIG_PATH
 
 
-def _nearest_existing(path: Path) -> Path:
-    while not path.exists() and path != path.parent:
-        path = path.parent
-    return path
-
-
-def check_same_filesystem(cfg: Config) -> None:
-    """Hardlinks need downloads and staging on one filesystem. Staging may not
-    exist yet on first run; its parent decides. (Separate bind mounts of one
-    filesystem share a device, so probe_hardlink covers that case.)"""
-    downloads = _nearest_existing(cfg.downloads_root)
-    staging = _nearest_existing(cfg.staging_root)
-    if downloads.stat().st_dev != staging.stat().st_dev:
-        raise ValueError(
-            f"downloads_root ({cfg.downloads_root}) and staging_root ({cfg.staging_root}) "
-            "are on different filesystems, so no hardlink can be made"
-        )
-
-
 def _fail(message: str) -> None:
     print(f"nasflow: {message}", file=sys.stderr)
     sys.exit(2)
@@ -131,9 +118,9 @@ def main(argv: list[str] | None = None) -> None:
         _fail(f"config file not found: {path}")
     except ValueError as exc:
         _fail(f"invalid config {path}: {exc}")
-    redact_secrets([cfg.tmdb_api_key, cfg.qb_password])
+    redact_secrets(cfg.secrets())
     try:
-        check_same_filesystem(cfg)
+        check_same_filesystem(cfg.downloads_root, cfg.staging_root)
     except ValueError as exc:
         _fail(str(exc))
     problem = probe_hardlink(cfg.downloads_root, cfg.staging_root)

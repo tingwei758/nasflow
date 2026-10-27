@@ -111,6 +111,11 @@ class Store:
         return self._conn.execute("SELECT 1 FROM items LIMIT 1").fetchone() is None
 
     @_locked
+    def ping(self) -> int:
+        """Item count, as a health probe: the file is open, readable, and sane."""
+        return self._conn.execute("SELECT count(*) FROM items").fetchone()[0]
+
+    @_locked
     def upsert_discovered(self, torrent: Torrent) -> None:
         """Record a torrent we have seen, without disturbing prior decisions."""
         now = time.time()

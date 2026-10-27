@@ -29,6 +29,20 @@ Open `http://192.168.4.126:9987` (the address and port in `docker-compose.yml`).
 A card leaves the board once its folder is gone from staging, so there is
 nothing to mark as done.
 
+## The lights
+
+Along the top of the board is one light per thing nasflow depends on:
+qBittorrent, TMDB, the staging folder, the database, and nasflow's own polling.
+Green means the last check worked, grey means it hasn't run yet, and red shows
+the reason beside it — "login rejected: check qb_password" rather than a number
+to look up. nasflow can be running perfectly and filing nothing when one of
+these is broken, which is what the lights are for.
+
+qBittorrent, staging, the database, and polling are re-checked every 5 minutes;
+TMDB every 15, to be polite to someone else's API. The staging light also turns
+red when free space drops below `health_min_free_gb` (20 GB by default). The
+checks only report: nothing nasflow does depends on what they find.
+
 Some things to expect:
 
 - **The board starts empty.** The first time nasflow reaches qBittorrent, it

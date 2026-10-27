@@ -26,6 +26,15 @@ async def _no_sleep(_seconds):
     return None
 
 
+async def _never_returns(*_args, **_kwargs):
+    """Stand-in for the other background loop: started, never does anything.
+
+    Both loops are patched in every lifespan test. A real one would reach for
+    qBittorrent and TMDB over the network from a unit test.
+    """
+    await asyncio.Event().wait()
+
+
 def run_loop(pipeline, iterations):
     asyncio.run(
         flow_main.poll_loop(pipeline, 60, max_iterations=iterations, sleep=_no_sleep)
@@ -117,6 +126,7 @@ def test_built_app_starts_and_stops_the_poll_loop(tmp_path, monkeypatch):
         await asyncio.Event().wait()  # run until cancelled
 
     monkeypatch.setattr(flow_main, "poll_loop", fake_loop)
+    monkeypatch.setattr(flow_main, "health_loop", _never_returns)
     app = flow_main.build_app(_cfg(tmp_path))
     with TestClient(app):
         pass
@@ -153,7 +163,8 @@ def test_startup_refuses_roots_on_different_filesystems(tmp_path, monkeypatch, c
 def test_startup_checks_staging_by_its_nearest_existing_parent(tmp_path):
     """On first run staging does not exist yet; its parent decides."""
     (tmp_path / "dl").mkdir()
-    flow_main.check_same_filesystem(_cfg(tmp_path))  # must not raise
+    cfg = _cfg(tmp_path)
+    flow_main.check_same_filesystem(cfg.downloads_root, cfg.staging_root)  # must not raise
 
 
 def test_startup_fails_when_the_hardlink_probe_fails(tmp_path, monkeypatch, capsys):
@@ -182,3 +193,39 @@ def test_log_output_never_carries_a_secret():
         logger.exception("lookup for %s failed", "tmdb-secret-123")
     out = stream.getvalue()
     assert "tmdb-secret-123" not in out and "RuntimeError" in out
+
+
+def test_built_app_starts_and_stops_the_health_loop(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    started = []
+
+    async def fake_loop(registry, **kwargs):
+        started.append(kwargs.get("tick_s"))
+        await asyncio.Event().wait()  # run until cancelled
+
+    monkeypatch.setattr(flow_main, "health_loop", fake_loop)
+    monkeypatch.setattr(flow_main, "poll_loop", _never_returns)
+    with TestClient(flow_main.build_app(_cfg(tmp_path))):
+        pass
+    assert started == [30]  # cfg.health_tick_s
+
+
+def test_health_loop_is_off_when_polling_is_off(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    started = []
+    monkeypatch.setattr(flow_main, "health_loop", lambda *a, **k: started.append(1))
+    with TestClient(flow_main.build_app(_cfg(tmp_path), start_polling=False)):
+        pass
+    assert started == []
+
+
+def test_built_app_serves_health(tmp_path):
+    from fastapi.testclient import TestClient
+
+    app = flow_main.build_app(_cfg(tmp_path), start_polling=False)
+    with TestClient(app) as client:
+        body = client.get("/api/health").json()
+    assert [c["name"] for c in body["checks"]][0] == "qbittorrent"
+    assert body["ok"] is True  # nothing probed yet, so nothing is red

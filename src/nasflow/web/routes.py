@@ -6,6 +6,7 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException
 
+from ..health import HealthRegistry
 from ..layout import plan_links
 from ..models import Identification
 from ..naming import parse_release_name
@@ -19,6 +20,8 @@ from .schemas import (
     STATE_TO_COLUMN,
     CandidateOut,
     ColumnOut,
+    HealthCheckOut,
+    HealthOut,
     ItemOut,
     MetaOut,
     PreviewOut,
@@ -27,8 +30,9 @@ from .schemas import (
 )
 
 
-def build_router(pipeline, store, cfg) -> APIRouter:
+def build_router(pipeline, store, cfg, health: HealthRegistry | None = None) -> APIRouter:
     router = APIRouter()
+    registry = health if health is not None else HealthRegistry(())
 
     def _require(hash_: str):
         item = store.get(hash_)
@@ -84,6 +88,14 @@ def build_router(pipeline, store, cfg) -> APIRouter:
         return MetaOut(
             columns=[ColumnOut(key=key, label=COLUMN_LABELS[key]) for key in COLUMNS],
             poster_base=cfg.tmdb_image_base,
+        )
+
+    @router.get("/api/health")
+    def health_() -> HealthOut:
+        """The checker's last snapshot. Probes nothing, so this is free to poll."""
+        return HealthOut(
+            ok=registry.overall_ok,
+            checks=[HealthCheckOut(**asdict(result)) for result in registry.snapshot()],
         )
 
     @router.get("/api/board")

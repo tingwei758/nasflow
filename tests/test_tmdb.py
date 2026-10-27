@@ -8,6 +8,7 @@ from nasflow.tmdb import TmdbClient, TmdbUnavailable, score_candidate
 BASE = "https://api.themoviedb.org/3"
 SEARCH_MOVIE = f"{BASE}/search/movie"
 SEARCH_TV = f"{BASE}/search/tv"
+CONFIGURATION = f"{BASE}/configuration"
 
 EL_CAMINO_MOVIE_ID = 559969
 
@@ -325,3 +326,17 @@ def test_candidate_carries_its_title_score():
     raw = movie_result(1, "Pegasus", year="2019")
     cand = score_candidate(raw, parsed(title_en="Pegasus", year=2019), "movie")
     assert cand.title_score == 1.0
+
+
+def test_ping_accepts_a_good_key():
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(CONFIGURATION).respond(200, json={"images": {}})
+        TmdbClient("key-123").ping()  # must not raise
+
+
+def test_ping_on_401_does_not_leak_the_key():
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(CONFIGURATION).respond(401, json={"status_message": "Invalid API key"})
+        with pytest.raises(TmdbUnavailable) as exc:
+            TmdbClient("key-123").ping()
+        assert "key-123" not in str(exc.value) and "401" in str(exc.value)

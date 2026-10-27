@@ -148,6 +148,21 @@ class TmdbClient:
             summary = f"{type(exc).__name__}: {exc}"
         return summary.replace(self._api_key, "***") if self._api_key else summary
 
+    def ping(self) -> None:
+        """Prove TMDB is reachable and the API key is accepted, as a health probe.
+
+        `/configuration` spends no search and returns a stable payload; a 401
+        there means the key is bad. Raises `TmdbUnavailable` either way, with
+        the key masked out of the message.
+        """
+        try:
+            response = self._client.get(
+                f"{_BASE}/configuration", params={"api_key": self._api_key}
+            )
+            response.raise_for_status()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise TmdbUnavailable(f"TMDB configuration failed: {self._describe(exc)}") from None
+
     def search(self, parsed: ParsedName, kind: str) -> list[Candidate]:
         """Search TMDB for `parsed`, best match first.
 

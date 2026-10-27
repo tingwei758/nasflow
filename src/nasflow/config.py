@@ -12,6 +12,7 @@ import tomllib
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 _MASK = "***"
 
@@ -71,6 +72,10 @@ class Config:
     require_english_title: bool = True
     bind_host: str = "0.0.0.0"
     bind_port: int = 9987
+    # The staging light turns red below this much free space.
+    health_min_free_gb: int = 20
+    # How often the checker looks for checks whose interval has elapsed.
+    health_tick_s: int = 30
     layout: LayoutConfig = LayoutConfig()
     media: MediaConfig = MediaConfig()
 
@@ -81,10 +86,24 @@ class Config:
             shown.append(f"{f.name}={value!r}")
         return f"Config({', '.join(shown)})"
 
+    def secrets(self) -> list[str]:
+        """Every value that must never reach a log line or the board.
+
+        Includes a password embedded in `qb_url` (`http://user:pw@host`), in
+        both its raw and percent-decoded forms: httpx puts the whole request
+        URL into its exception text, and `str(URL)` does not mask userinfo.
+        """
+        found = [getattr(self, name) for name in sorted(_SECRET_FIELDS)]
+        url_password = urlsplit(self.qb_url).password
+        if url_password:
+            found += [url_password, unquote(url_password)]
+        return [value for value in found if value]
+
 
 _SECRET_FIELDS = {"tmdb_api_key", "qb_password"}
 
 _PATH_FIELDS = {"downloads_root", "staging_root", "db_path"}
+_POSITIVE_FIELDS = ("poll_interval_s", "health_tick_s")
 _TUPLE_FIELDS = {
     "video_extensions",
     "subtitle_extensions",
@@ -137,6 +156,12 @@ def load_config(path: Path) -> Config:
     for key in _PATH_FIELDS:
         raw[key] = Path(raw[key])
     _check_disjoint(raw["downloads_root"], raw["staging_root"])
+
+    for key in _POSITIVE_FIELDS:
+        value = raw.get(key)
+        if value is not None and not value > 0:
+            # A zero sleep turns its loop into a busy loop that pins a core.
+            raise ValueError(f"{key} must be greater than 0, got {value!r}")
 
     return replace(Config(**raw), layout=layout, media=media)
 

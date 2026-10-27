@@ -88,3 +88,33 @@ def test_needs_you_item_carries_what_flow_parsed(api):
     assert item["parsed_year"] == 2011
     assert item["video_count"] == 1
     assert item["classification_reason"] == "single video, no episode markers"
+
+
+def test_health_strip_is_in_the_page(api):
+    assert 'id="health"' in api[0].get("/").text
+
+
+def test_only_api_js_calls_health(api):
+    assert "getHealth" in (STATIC / "api.js").read_text(encoding="utf-8")
+    assert "/api/health" not in (STATIC / "board.js").read_text(encoding="utf-8")
+
+
+def test_check_labels_are_not_hardcoded_in_js():
+    """The strip renders whatever /api/health labels its checks.
+
+    resolve.js says "TMDB" for its own manual-search controls, which has
+    nothing to do with a check label; that one pair is the only exemption.
+    """
+    exempt = {("resolve.js", "TMDB")}
+    for name in MODULES:
+        text = (STATIC / name).read_text(encoding="utf-8")
+        for label in ("qBittorrent", "TMDB", "Staging folder", "Database", "Polling"):
+            if (name, label) in exempt:
+                continue
+            assert label not in text, f"{name} hardcodes {label!r}"
+
+
+def test_health_strip_is_grouped_not_announced(api):
+    """A dot changing colour every few minutes is not worth interrupting for."""
+    tag = next(line for line in api[0].get("/").text.splitlines() if 'id="health"' in line)
+    assert 'role="group"' in tag and "aria-live" not in tag and 'role="status"' not in tag
