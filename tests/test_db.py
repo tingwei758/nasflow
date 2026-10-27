@@ -184,3 +184,10 @@ def test_is_empty_until_an_item_is_recorded(tmp_path):
     assert s.is_empty() is True
     s.upsert_discovered(torrent())
     assert s.is_empty() is False
+
+
+def test_ping_returns_the_item_count(tmp_path):
+    store = Store(tmp_path / "f.db")
+    assert store.ping() == 0
+    store.upsert_discovered(torrent())
+    assert store.ping() == 1

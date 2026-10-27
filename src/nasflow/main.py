@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from .config import DEFAULT_CONFIG_PATH, Config, load_config
 from .db import Store
 from .linker import probe_hardlink
+from .pathmap import nearest_existing
 from .pipeline import Pipeline
 from .qbit import QbitClient
 from .redact import RedactingFormatter
@@ -98,18 +99,12 @@ def resolve_config_path(argv: list[str]) -> Path:
     return Path(env) if env else DEFAULT_CONFIG_PATH
 
 
-def _nearest_existing(path: Path) -> Path:
-    while not path.exists() and path != path.parent:
-        path = path.parent
-    return path
-
-
 def check_same_filesystem(cfg: Config) -> None:
     """Hardlinks need downloads and staging on one filesystem. Staging may not
     exist yet on first run; its parent decides. (Separate bind mounts of one
     filesystem share a device, so probe_hardlink covers that case.)"""
-    downloads = _nearest_existing(cfg.downloads_root)
-    staging = _nearest_existing(cfg.staging_root)
+    downloads = nearest_existing(cfg.downloads_root)
+    staging = nearest_existing(cfg.staging_root)
     if downloads.stat().st_dev != staging.stat().st_dev:
         raise ValueError(
             f"downloads_root ({cfg.downloads_root}) and staging_root ({cfg.staging_root}) "

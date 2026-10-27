@@ -7,6 +7,7 @@ from nasflow.qbit import QbitClient, QbitUnavailable
 BASE = "http://qb:8080"
 LOGIN = f"{BASE}/api/v2/auth/login"
 INFO = f"{BASE}/api/v2/torrents/info"
+VERSION = f"{BASE}/api/v2/app/version"
 
 
 def torrent(hash_, progress=1.0, state="seeding", name="Some.Release.2020"):
@@ -128,3 +129,30 @@ def test_settling_while_any_torrent_is_checked_or_moved(client):
             assert client.settling() is True
         info.respond(200, json=[torrent("a"), torrent("b", 0.4, "downloading")])
         assert client.settling() is False
+
+
+def test_app_version_logs_in_and_returns_the_version(client):
+    with respx.mock(assert_all_called=False) as mock:
+        login = mock.post(LOGIN).respond(200, text="Ok.")
+        mock.get(VERSION).respond(200, text="v4.6.5")
+        assert client.app_version() == "v4.6.5"
+        assert login.called
+
+
+def test_app_version_relogins_once_on_403(client):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.post(LOGIN).respond(200, text="Ok.")
+        mock.get(VERSION).mock(
+            side_effect=[
+                httpx.Response(403, text="Forbidden"),
+                httpx.Response(200, text="v4.6.5"),
+            ]
+        )
+        assert client.app_version() == "v4.6.5"
+
+
+def test_app_version_reports_rejected_credentials(client):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.post(LOGIN).respond(200, text="Fails.")
+        with pytest.raises(QbitUnavailable, match="qb_password"):
+            client.app_version()

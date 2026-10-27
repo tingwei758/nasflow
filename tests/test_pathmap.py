@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from nasflow.pathmap import to_container_path, to_host_path
+from nasflow.pathmap import nearest_existing, to_container_path, to_host_path
 
 PFX = "/downloads"
 ROOT = Path("/volume1/docker/qb/downloads")
@@ -42,3 +42,11 @@ def test_sibling_prefix_is_not_a_match():
 
 def test_roundtrip():
     assert to_container_path(to_host_path(P, PFX, ROOT), PFX, ROOT) == P
+
+
+def test_nearest_existing_walks_up_to_a_folder_that_exists(tmp_path):
+    assert nearest_existing(tmp_path / "a" / "b" / "c") == tmp_path
+
+
+def test_nearest_existing_returns_a_path_that_exists_unchanged(tmp_path):
+    assert nearest_existing(tmp_path) == tmp_path

@@ -78,22 +78,27 @@ class QbitClient:
             raise QbitUnavailable("login rejected: check qb_username / qb_password")
         self._authenticated = True
 
-    def _fetch_info(self) -> httpx.Response:
+    def _get(self, path: str, what: str) -> httpx.Response:
         try:
-            return self._client.get(f"{self._base}/api/v2/torrents/info")
+            return self._client.get(f"{self._base}{path}")
         except httpx.HTTPError as exc:
-            raise QbitUnavailable(f"torrent list request failed: {exc}") from exc
+            raise QbitUnavailable(f"{what} request failed: {exc}") from exc
 
-    def _list(self) -> list[dict]:
+    def _authenticated_get(self, path: str, what: str) -> httpx.Response:
+        """GET `path`, logging in first and re-logging in once on a 403."""
         if not self._authenticated:
             self._login()
 
-        response = self._fetch_info()
+        response = self._get(path, what)
         if response.status_code == 403:
             # Session expired. One re-login, then give up.
             self._authenticated = False
             self._login()
-            response = self._fetch_info()
+            response = self._get(path, what)
+        return response
+
+    def _list(self) -> list[dict]:
+        response = self._authenticated_get("/api/v2/torrents/info", "torrent list")
 
         try:
             response.raise_for_status()
@@ -112,6 +117,20 @@ class QbitClient:
             for raw in self._list()
             if float(raw.get("progress", 0)) >= 1.0 and raw.get("state") in _FINISHED_STATES
         ]
+
+    def app_version(self) -> str:
+        """qBittorrent's version string, as a health probe.
+
+        Authenticated on purpose: it proves the WebUI is reachable *and* that
+        the credentials still work, which is the failure worth catching. It
+        touches no torrent.
+        """
+        response = self._authenticated_get("/api/v2/app/version", "version")
+        try:
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise QbitUnavailable(f"could not read the version: {exc}") from exc
+        return response.text.strip()
 
     def settling(self) -> bool:
         """Whether any torrent is still being checked or moved.

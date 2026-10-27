@@ -9,6 +9,18 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 
 
+def nearest_existing(path: Path) -> Path:
+    """The given path, or the closest ancestor of it that exists.
+
+    Staging may not exist yet on first run, and a path that is gone tells us
+    nothing about the device it used to live on; its nearest existing parent
+    does.
+    """
+    while not path.exists() and path != path.parent:
+        path = path.parent
+    return path
+
+
 def _normalized_prefix(prefix: str) -> PurePosixPath:
     return PurePosixPath(prefix.rstrip("/") or "/")
 
