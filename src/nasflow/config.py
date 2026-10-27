@@ -103,6 +103,7 @@ class Config:
 _SECRET_FIELDS = {"tmdb_api_key", "qb_password"}
 
 _PATH_FIELDS = {"downloads_root", "staging_root", "db_path"}
+_POSITIVE_FIELDS = ("poll_interval_s", "health_tick_s")
 _TUPLE_FIELDS = {
     "video_extensions",
     "subtitle_extensions",
@@ -155,6 +156,12 @@ def load_config(path: Path) -> Config:
     for key in _PATH_FIELDS:
         raw[key] = Path(raw[key])
     _check_disjoint(raw["downloads_root"], raw["staging_root"])
+
+    for key in _POSITIVE_FIELDS:
+        value = raw.get(key)
+        if value is not None and not value > 0:
+            # A zero sleep turns its loop into a busy loop that pins a core.
+            raise ValueError(f"{key} must be greater than 0, got {value!r}")
 
     return replace(Config(**raw), layout=layout, media=media)
 

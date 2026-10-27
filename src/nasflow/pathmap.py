@@ -1,7 +1,8 @@
 """Container <-> host path translation.
 
 qBittorrent reports paths as its own container sees them (`/downloads/...`);
-nasflow sees the same files at a host path. Nothing else lives in this module.
+nasflow sees the same files at a host path. Also the device comparison that
+both startup and the staging light use to decide whether a hardlink can work.
 """
 
 from __future__ import annotations
@@ -19,6 +20,22 @@ def nearest_existing(path: Path) -> Path:
     while not path.exists() and path != path.parent:
         path = path.parent
     return path
+
+
+def check_same_filesystem(downloads_root: Path, staging_root: Path) -> None:
+    """Hardlinks need downloads and staging on one filesystem. Staging may not
+    exist yet on first run; its parent decides. (Separate bind mounts of one
+    filesystem share a device, so `linker.probe_hardlink` covers that case.)
+
+    Raises `ValueError` when they differ, `OSError` when either cannot be read.
+    """
+    downloads = nearest_existing(downloads_root)
+    staging = nearest_existing(staging_root)
+    if downloads.stat().st_dev != staging.stat().st_dev:
+        raise ValueError(
+            f"downloads_root ({downloads_root}) and staging_root ({staging_root}) "
+            "are on different filesystems, so no hardlink can be made"
+        )
 
 
 def _normalized_prefix(prefix: str) -> PurePosixPath:

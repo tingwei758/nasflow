@@ -163,7 +163,8 @@ def test_startup_refuses_roots_on_different_filesystems(tmp_path, monkeypatch, c
 def test_startup_checks_staging_by_its_nearest_existing_parent(tmp_path):
     """On first run staging does not exist yet; its parent decides."""
     (tmp_path / "dl").mkdir()
-    flow_main.check_same_filesystem(_cfg(tmp_path))  # must not raise
+    cfg = _cfg(tmp_path)
+    flow_main.check_same_filesystem(cfg.downloads_root, cfg.staging_root)  # must not raise
 
 
 def test_startup_fails_when_the_hardlink_probe_fails(tmp_path, monkeypatch, capsys):

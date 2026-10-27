@@ -24,7 +24,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .pathmap import nearest_existing
+from .pathmap import check_same_filesystem, nearest_existing
 from .qbit import QbitUnavailable
 from .redact import redact
 from .tmdb import TmdbUnavailable
@@ -167,20 +167,22 @@ def _staging_probe(cfg) -> str:
     writer in staging is worse than comparing devices.
     """
     try:
-        if not cfg.downloads_root.is_dir():
-            raise CheckFailed(
-                f"{cfg.downloads_root} is missing — is the downloads volume mounted?"
-            )
-        downloads = nearest_existing(cfg.downloads_root)
+        # Only a path that is really absent means unmounted: is_dir() would also
+        # say False on a permission error, and blame the mount for it.
+        cfg.downloads_root.stat()
+    except FileNotFoundError:
+        raise CheckFailed(
+            f"{cfg.downloads_root} is missing — is the downloads volume mounted?"
+        ) from None
+    except OSError as exc:
+        raise CheckFailed(f"cannot read downloads: {exc}") from None
+    try:
+        check_same_filesystem(cfg.downloads_root, cfg.staging_root)
         staging = nearest_existing(cfg.staging_root)
-        same_device = downloads.stat().st_dev == staging.stat().st_dev
+    except ValueError as exc:
+        raise CheckFailed(str(exc)) from None
     except OSError as exc:
         raise CheckFailed(f"cannot read staging: {exc}") from None
-    if not same_device:
-        raise CheckFailed(
-            f"{cfg.downloads_root} and {cfg.staging_root} are on different filesystems, "
-            "so no hardlink can be made"
-        )
 
     free_gb = _free_gb(staging)
     if free_gb < cfg.health_min_free_gb:
@@ -190,13 +192,24 @@ def _staging_probe(cfg) -> str:
     return f"linkable, {free_gb:.0f} GB free"
 
 
-def _polling_probe(cfg, pipeline, now: Callable[[], float]) -> str:
-    """Whether the poll loop is still ticking — the one thing no other check sees."""
+def _polling_probe(cfg, pipeline, now: Callable[[], float], started_at: float) -> str:
+    """Whether the poll loop is still ticking — the one thing no other check sees.
+
+    Before the first poll the light is `unknown`, but only for as long as a
+    poll would be allowed to take: a first poll that never finishes (a mount
+    wedged since boot) is the same stall as a later one.
+    """
+    limit = max(3 * cfg.poll_interval_s, _MIN_POLL_GRACE_S)
     last = pipeline.last_poll_at
     if last is None:
+        waited = now() - started_at
+        if waited > limit:
+            raise CheckFailed(
+                f"no poll has finished since startup {waited:.0f}s ago "
+                f"(expected within {limit:.0f}s)"
+            )
         raise NotYetKnown("waiting for the first poll")
     gap = now() - last
-    limit = max(3 * cfg.poll_interval_s, _MIN_POLL_GRACE_S)
     if gap > limit:
         raise CheckFailed(f"last poll was {gap:.0f}s ago (expected within {limit:.0f}s)")
     return f"last poll {gap:.0f}s ago"
@@ -221,12 +234,19 @@ def build_checks(cfg, store, pipeline, *, now=time.time) -> list[Check]:
     def database() -> str:
         return f"ok, {store.ping()} items"
 
+    started_at = now()
+
     return [
         Check("qbittorrent", "qBittorrent", QB_INTERVAL_S, qbittorrent),
         Check("tmdb", "TMDB", TMDB_INTERVAL_S, tmdb),
         Check("staging", "Staging folder", LOCAL_INTERVAL_S, lambda: _staging_probe(cfg)),
         Check("database", "Database", LOCAL_INTERVAL_S, database),
-        Check("polling", "Polling", LOCAL_INTERVAL_S, lambda: _polling_probe(cfg, pipeline, now)),
+        Check(
+            "polling",
+            "Polling",
+            LOCAL_INTERVAL_S,
+            lambda: _polling_probe(cfg, pipeline, now, started_at),
+        ),
     ]
 
 
@@ -237,6 +257,33 @@ def _run_probe(check: Check) -> tuple[str, str]:
         return "ok", str(check.probe())
     except BaseException as exc:  # noqa: BLE001 - a probe may not kill the checker
         return _describe(exc)
+
+
+def _settle(future: asyncio.Future, result: tuple[str, str]) -> None:
+    if not future.done():  # the loop may have been cancelled while we ran
+        future.set_result(result)
+
+
+def _start_probe(loop: asyncio.AbstractEventLoop, check: Check) -> asyncio.Future:
+    """Run one probe on a thread of its own, not on the loop's default executor.
+
+    The default executor is shared with the poll loop's `asyncio.to_thread`, so
+    probes stuck on a wedged mount would take the pipeline's workers; and its
+    threads are joined at exit, so one would hold up shutdown until Docker
+    kills the container. A daemon thread does neither. They stay bounded: the
+    loop never starts a check again while its last thread is still running.
+    """
+    future = loop.create_future()
+
+    def work() -> None:
+        result = _run_probe(check)
+        try:
+            loop.call_soon_threadsafe(_settle, future, result)
+        except RuntimeError:
+            pass  # the loop closed while we were blocked; nobody is waiting
+
+    threading.Thread(target=work, name=f"health-{check.name}", daemon=True).start()
+    return future
 
 
 async def health_loop(
@@ -266,12 +313,11 @@ async def health_loop(
     iterations = 0
     while max_iterations is None or iterations < max_iterations:
         iterations += 1
-        checked_at = now()
-        for check in registry.due(checked_at):
+        for check in registry.due(now()):
             pending = in_flight.get(check.name)
             if pending is not None and not pending.done():
                 continue  # still running from an earlier tick
-            future = loop.run_in_executor(None, _run_probe, check)
+            future = _start_probe(loop, check)
             in_flight[check.name] = future
             try:
                 status, detail = await asyncio.wait_for(
@@ -279,5 +325,7 @@ async def health_loop(
                 )
             except TimeoutError:
                 status, detail = "fail", f"no answer within {probe_timeout_s:.0f}s"
-            registry.record(check.name, status, detail, checked_at)
+            # Stamped when this probe answered: an earlier slow one in the same
+            # tick must not make this result look older than it is.
+            registry.record(check.name, status, detail, now())
         await sleep(tick_s)

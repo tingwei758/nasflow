@@ -213,3 +213,10 @@ def test_secrets_include_credentials_embedded_in_qb_url():
 def test_secrets_are_just_the_two_fields_without_url_credentials(tmp_path):
     cfg = load_config(write_minimal(tmp_path))
     assert set(cfg.secrets()) == {"secret-pw", "secret-key"}
+
+
+@pytest.mark.parametrize("field", ["poll_interval_s", "health_tick_s"])
+@pytest.mark.parametrize("value", [0, -5])
+def test_loop_intervals_must_be_positive(tmp_path, field, value):
+    with pytest.raises(ValueError, match=field):
+        load_config(write_toml(tmp_path, f"{field} = {value}\n"))

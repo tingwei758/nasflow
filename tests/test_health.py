@@ -121,8 +121,9 @@ def _mixed(first_probe, second_probe=None):
 
 
 def _run_with_clock(iterations, step_s):
-    """Run `iterations` ticks on a clock that advances `step_s` per tick."""
+    """Run `iterations` ticks on a clock that each sleep advances by `step_s`."""
     runs = Counter()
+    clock = [0.0]
 
     def tally(name):
         def probe():
@@ -131,14 +132,18 @@ def _run_with_clock(iterations, step_s):
 
         return probe
 
+    async def advance(_seconds):
+        clock[0] += step_s
+
     registry = HealthRegistry(
         [
             check(name="fast", interval_s=300.0, probe=tally("fast")),
             check(name="slow", interval_s=900.0, probe=tally("slow")),
         ]
     )
-    ticks = iter([i * step_s for i in range(iterations)])
-    _run(registry, iterations=iterations, now=lambda: next(ticks))
+    asyncio.run(
+        health_loop(registry, sleep=advance, now=lambda: clock[0], max_iterations=iterations)
+    )
     return dict(runs)
 
 
@@ -279,8 +284,7 @@ def test_staging_check_fails_across_filesystems(cfg, store, pipeline, monkeypatc
     def fake_stat(self, *args, **kwargs):
         result = real_stat(self, *args, **kwargs)
         if self == cfg.downloads_root:
-            # Everything the real stat answers, on a different device. Keeping
-            # st_mode matters: the probe asks is_dir() before comparing devices.
+            # Everything the real stat answers, on a different device.
             return type(
                 "S", (), {"st_dev": result.st_dev + 1, "st_mode": result.st_mode}
             )()
@@ -376,3 +380,45 @@ def test_a_password_embedded_in_qb_url_is_masked_in_a_detail(cfg):
         "qbittorrent", "fail", "POST http://u:proxy-pass@qb:8999/api/v2/auth/login 401", 1.0
     )
     assert "proxy-pass" not in registry.snapshot()[0].detail
+
+
+def test_polling_check_fails_when_the_first_poll_never_finishes(cfg, store, pipeline):
+    clock = [1000.0]
+    checks = build_checks(cfg, store, pipeline, now=lambda: clock[0])
+    clock[0] += 3600  # last_poll_at is still None
+    with pytest.raises(CheckFailed, match="since startup"):
+        _probe(checks, "polling")
+
+
+def test_staging_check_blames_permissions_not_the_mount(cfg, store, pipeline, monkeypatch):
+    real_stat = Path.stat
+
+    def denied(self, *args, **kwargs):
+        if self == cfg.downloads_root:
+            raise PermissionError(13, "Permission denied")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", denied)
+    with pytest.raises(CheckFailed, match="Permission denied") as caught:
+        _probe(build_checks(cfg, store, pipeline), "staging")
+    assert "mounted" not in str(caught.value)
+
+
+def test_probes_run_on_daemon_threads_off_the_default_executor():
+    seen = []
+    registry = _run_one(check(probe=lambda: seen.append(threading.current_thread()) or "ok"))
+    assert registry.snapshot()[0].status == "ok"
+    assert seen[0].daemon and seen[0].name == "health-qbittorrent"
+
+
+def test_each_result_is_stamped_when_its_own_probe_answered():
+    clock = [0.0]
+
+    def slow():
+        clock[0] += 90.0  # stands in for a probe that took 90s
+        return "slow"
+
+    registry = _mixed(slow)
+    _run(registry, iterations=1, now=lambda: clock[0])
+    first, second = registry.snapshot()
+    assert (first.checked_at, second.checked_at) == (90.0, 90.0)

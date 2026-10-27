@@ -72,9 +72,10 @@ function render(board) {
 }
 
 // Every label and reason comes from the server, so a check added there needs
-// no change here. The dot carries the status for anyone who can't see colour:
-// role="img" is what makes its aria-label count, which a bare span's generic
-// role does not.
+// no change here. The dot is colour only and hidden from screen readers; the
+// status is said once, in visually hidden text after the label. A failing
+// check's reason is said by its own red line below, so only the others carry
+// their detail here.
 function renderHealth(health) {
   const failing = health.checks.filter((check) => check.status === "fail");
   healthNode.replaceChildren(
@@ -82,12 +83,13 @@ function renderHealth(health) {
       el(
         "span",
         { class: "light", title: `${check.label}: ${check.status} — ${check.detail}` },
-        el("span", {
-          class: `dot dot-${check.status}`,
-          role: "img",
-          "aria-label": `${check.label}: ${check.status} — ${check.detail}`,
-        }),
+        el("span", { class: `dot dot-${check.status}`, "aria-hidden": "true" }),
         check.label,
+        el(
+          "span",
+          { class: "sr-only" },
+          check.status === "fail" ? `: ${check.status}` : `: ${check.status} — ${check.detail}`,
+        ),
       ),
     ),
     ...failing.map((check) =>

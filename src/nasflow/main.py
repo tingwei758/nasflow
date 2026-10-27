@@ -17,7 +17,7 @@ from .config import DEFAULT_CONFIG_PATH, Config, load_config
 from .db import Store
 from .health import HealthRegistry, build_checks, health_loop
 from .linker import probe_hardlink
-from .pathmap import nearest_existing
+from .pathmap import check_same_filesystem
 from .pipeline import Pipeline
 from .qbit import QbitClient
 from .redact import RedactingFormatter
@@ -104,19 +104,6 @@ def resolve_config_path(argv: list[str]) -> Path:
     return Path(env) if env else DEFAULT_CONFIG_PATH
 
 
-def check_same_filesystem(cfg: Config) -> None:
-    """Hardlinks need downloads and staging on one filesystem. Staging may not
-    exist yet on first run; its parent decides. (Separate bind mounts of one
-    filesystem share a device, so probe_hardlink covers that case.)"""
-    downloads = nearest_existing(cfg.downloads_root)
-    staging = nearest_existing(cfg.staging_root)
-    if downloads.stat().st_dev != staging.stat().st_dev:
-        raise ValueError(
-            f"downloads_root ({cfg.downloads_root}) and staging_root ({cfg.staging_root}) "
-            "are on different filesystems, so no hardlink can be made"
-        )
-
-
 def _fail(message: str) -> None:
     print(f"nasflow: {message}", file=sys.stderr)
     sys.exit(2)
@@ -133,7 +120,7 @@ def main(argv: list[str] | None = None) -> None:
         _fail(f"invalid config {path}: {exc}")
     redact_secrets(cfg.secrets())
     try:
-        check_same_filesystem(cfg)
+        check_same_filesystem(cfg.downloads_root, cfg.staging_root)
     except ValueError as exc:
         _fail(str(exc))
     problem = probe_hardlink(cfg.downloads_root, cfg.staging_root)
