@@ -15,6 +15,7 @@ from fastapi import FastAPI
 
 from .config import DEFAULT_CONFIG_PATH, Config, load_config
 from .db import Store
+from .health import HealthRegistry, build_checks, health_loop
 from .linker import probe_hardlink
 from .pathmap import nearest_existing
 from .pipeline import Pipeline
@@ -56,21 +57,28 @@ def build_app(cfg: Config, *, start_polling: bool = True) -> FastAPI:
         ),
     )
 
+    # The board reads the last snapshot; the checker fills it in the background.
+    health = HealthRegistry(
+        build_checks(cfg, store, pipeline),
+        secrets=[cfg.tmdb_api_key, cfg.qb_password],
+    )
+
     @contextlib.asynccontextmanager
     async def lifespan(_app):
-        task = None
+        tasks = []
         if start_polling:
-            task = asyncio.create_task(poll_loop(pipeline, cfg.poll_interval_s))
+            tasks.append(asyncio.create_task(poll_loop(pipeline, cfg.poll_interval_s)))
+            tasks.append(asyncio.create_task(health_loop(health, tick_s=cfg.health_tick_s)))
         try:
             yield
         finally:
-            if task is not None:
+            for task in tasks:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             store.close()
 
-    return create_app(pipeline, store, cfg, lifespan=lifespan)
+    return create_app(pipeline, store, cfg, lifespan=lifespan, health=health)
 
 
 def configure_logging() -> None:

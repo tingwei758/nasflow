@@ -182,3 +182,38 @@ def test_log_output_never_carries_a_secret():
         logger.exception("lookup for %s failed", "tmdb-secret-123")
     out = stream.getvalue()
     assert "tmdb-secret-123" not in out and "RuntimeError" in out
+
+
+def test_built_app_starts_and_stops_the_health_loop(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    started = []
+
+    async def fake_loop(registry, **kwargs):
+        started.append(kwargs.get("tick_s"))
+        await asyncio.Event().wait()  # run until cancelled
+
+    monkeypatch.setattr(flow_main, "health_loop", fake_loop)
+    with TestClient(flow_main.build_app(_cfg(tmp_path))):
+        pass
+    assert started == [30]  # cfg.health_tick_s
+
+
+def test_health_loop_is_off_when_polling_is_off(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    started = []
+    monkeypatch.setattr(flow_main, "health_loop", lambda *a, **k: started.append(1))
+    with TestClient(flow_main.build_app(_cfg(tmp_path), start_polling=False)):
+        pass
+    assert started == []
+
+
+def test_built_app_serves_health(tmp_path):
+    from fastapi.testclient import TestClient
+
+    app = flow_main.build_app(_cfg(tmp_path), start_polling=False)
+    with TestClient(app) as client:
+        body = client.get("/api/health").json()
+    assert [c["name"] for c in body["checks"]][0] == "qbittorrent"
+    assert body["ok"] is True  # nothing probed yet, so nothing is red
