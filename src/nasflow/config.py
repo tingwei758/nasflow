@@ -12,6 +12,7 @@ import tomllib
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 _MASK = "***"
 
@@ -84,6 +85,19 @@ class Config:
             value = _MASK if f.name in _SECRET_FIELDS else getattr(self, f.name)
             shown.append(f"{f.name}={value!r}")
         return f"Config({', '.join(shown)})"
+
+    def secrets(self) -> list[str]:
+        """Every value that must never reach a log line or the board.
+
+        Includes a password embedded in `qb_url` (`http://user:pw@host`), in
+        both its raw and percent-decoded forms: httpx puts the whole request
+        URL into its exception text, and `str(URL)` does not mask userinfo.
+        """
+        found = [getattr(self, name) for name in sorted(_SECRET_FIELDS)]
+        url_password = urlsplit(self.qb_url).password
+        if url_password:
+            found += [url_password, unquote(url_password)]
+        return [value for value in found if value]
 
 
 _SECRET_FIELDS = {"tmdb_api_key", "qb_password"}

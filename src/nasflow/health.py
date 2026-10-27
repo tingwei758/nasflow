@@ -39,6 +39,11 @@ _NEVER_CHECKED = "not checked yet"
 
 _BYTES_PER_GB = 1024**3
 
+# A probe that has not answered in this long is treated as a failure. Well above
+# every client's own timeout: this is here to catch an *unbounded* hang — a
+# wedged NFS mount makes `stat` block forever — not a merely slow server.
+PROBE_TIMEOUT_S = 90.0
+
 # How long the polling light tolerates silence: three cycles, and never less
 # than this, so a short poll interval does not make the light twitchy.
 _MIN_POLL_GRACE_S = 180.0
@@ -152,14 +157,22 @@ def _free_gb(path: Path) -> float:
 def _staging_probe(cfg) -> str:
     """Hardlinks still possible, and room to make them.
 
-    Measured against each root's nearest existing parent: on first run staging
-    does not exist yet, and a path that is gone says nothing about the device
-    it used to be on. Deliberately not a real `os.link` probe — that writes
-    files, and a periodic writer in staging is worse than comparing devices.
+    Staging is measured by its nearest existing parent, because on first run it
+    does not exist yet and a path that is gone says nothing about the device it
+    used to be on. Downloads gets no such grace: if it is missing, the volume
+    is unmounted, and walking up to a parent would compare that parent against
+    itself and report a cheerful green.
+
+    Deliberately not a real `os.link` probe — that writes files, and a periodic
+    writer in staging is worse than comparing devices.
     """
-    downloads = nearest_existing(cfg.downloads_root)
-    staging = nearest_existing(cfg.staging_root)
     try:
+        if not cfg.downloads_root.is_dir():
+            raise CheckFailed(
+                f"{cfg.downloads_root} is missing — is the downloads volume mounted?"
+            )
+        downloads = nearest_existing(cfg.downloads_root)
+        staging = nearest_existing(cfg.staging_root)
         same_device = downloads.stat().st_dev == staging.stat().st_dev
     except OSError as exc:
         raise CheckFailed(f"cannot read staging: {exc}") from None
@@ -217,12 +230,22 @@ def build_checks(cfg, store, pipeline, *, now=time.time) -> list[Check]:
     ]
 
 
+def _run_probe(check: Check) -> tuple[str, str]:
+    """Run one probe in a worker thread. Never raises, so a hung thread that
+    finishes after we stopped waiting leaves no unretrieved exception."""
+    try:
+        return "ok", str(check.probe())
+    except BaseException as exc:  # noqa: BLE001 - a probe may not kill the checker
+        return _describe(exc)
+
+
 async def health_loop(
     registry: HealthRegistry,
     *,
     tick_s: float = 30.0,
     sleep=asyncio.sleep,
     now=time.time,
+    probe_timeout_s: float = PROBE_TIMEOUT_S,
     max_iterations: int | None = None,
 ) -> None:
     """Probe what is due, record it, sleep — forever.
@@ -231,16 +254,30 @@ async def health_loop(
     than a tick later. Probes are synchronous (blocking HTTP, filesystem), so
     each runs in a worker thread and the board stays responsive meanwhile. One
     bad probe never ends the loop, and never stops the checks after it.
+
+    A probe that never answers is recorded as a failure and left running: a
+    thread blocked in the kernel cannot be cancelled, so the check is skipped
+    on later ticks until its thread finishes rather than piling up copies of
+    it. Without the timeout, one wedged mount would freeze every other light
+    at its last value — green, and indistinguishable from healthy.
     """
+    loop = asyncio.get_running_loop()
+    in_flight: dict[str, asyncio.Future] = {}
     iterations = 0
     while max_iterations is None or iterations < max_iterations:
         iterations += 1
         checked_at = now()
         for check in registry.due(checked_at):
+            pending = in_flight.get(check.name)
+            if pending is not None and not pending.done():
+                continue  # still running from an earlier tick
+            future = loop.run_in_executor(None, _run_probe, check)
+            in_flight[check.name] = future
             try:
-                detail = await asyncio.to_thread(check.probe)
-                status = "ok"
-            except Exception as exc:
-                status, detail = _describe(exc)
+                status, detail = await asyncio.wait_for(
+                    asyncio.shield(future), probe_timeout_s
+                )
+            except TimeoutError:
+                status, detail = "fail", f"no answer within {probe_timeout_s:.0f}s"
             registry.record(check.name, status, detail, checked_at)
         await sleep(tick_s)

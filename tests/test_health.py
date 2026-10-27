@@ -2,8 +2,10 @@
 
 import asyncio
 import shutil
+import threading
 import time
 from collections import Counter, namedtuple
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -73,10 +75,28 @@ def check(name="qbittorrent", interval_s=300.0, probe=None):
     return Check(name=name, label=name.title(), interval_s=interval_s, probe=probe or probe_ok())
 
 
-def _run(registry, iterations=1, now=time.time):
+def _run(registry, iterations=1, now=time.time, probe_timeout_s=90.0):
     asyncio.run(
-        health_loop(registry, tick_s=30.0, sleep=_no_sleep, now=now, max_iterations=iterations)
+        health_loop(
+            registry,
+            tick_s=30.0,
+            sleep=_no_sleep,
+            now=now,
+            probe_timeout_s=probe_timeout_s,
+            max_iterations=iterations,
+        )
     )
+
+
+def _hung_probe(invocations, release, block_s=0.5):
+    """A probe that does not answer. Blocks briefly so no thread outlives the test."""
+
+    def probe():
+        invocations.append(1)
+        release.wait(timeout=block_s)
+        return "answered too late"
+
+    return probe
 
 
 def _run_one(chk):
@@ -259,7 +279,11 @@ def test_staging_check_fails_across_filesystems(cfg, store, pipeline, monkeypatc
     def fake_stat(self, *args, **kwargs):
         result = real_stat(self, *args, **kwargs)
         if self == cfg.downloads_root:
-            return type("S", (), {"st_dev": result.st_dev + 1})()
+            # Everything the real stat answers, on a different device. Keeping
+            # st_mode matters: the probe asks is_dir() before comparing devices.
+            return type(
+                "S", (), {"st_dev": result.st_dev + 1, "st_mode": result.st_mode}
+            )()
         return result
 
     monkeypatch.setattr(Path, "stat", fake_stat)
@@ -313,3 +337,42 @@ def test_intervals_match_the_spec(cfg, store, pipeline):
         "database": 300.0,
         "polling": 300.0,
     }
+
+
+def test_a_hung_probe_fails_with_a_timeout_and_the_rest_of_the_tick_still_runs():
+    release = threading.Event()
+    invocations = []
+    registry = _mixed(_hung_probe(invocations, release))
+    try:
+        _run(registry, iterations=1, probe_timeout_s=0.05)
+        first, second = registry.snapshot()
+        assert first.status == "fail" and "no answer" in first.detail
+        assert second.status == "ok", "a hung probe must not swallow the checks after it"
+    finally:
+        release.set()
+
+
+def test_a_hung_check_is_not_started_again_while_it_is_still_running():
+    release = threading.Event()
+    invocations = []
+    registry = HealthRegistry([check(interval_s=0.0, probe=_hung_probe(invocations, release))])
+    try:
+        _run(registry, iterations=3, probe_timeout_s=0.02)
+        assert len(invocations) == 1
+    finally:
+        release.set()
+
+
+def test_staging_check_fails_when_the_downloads_volume_is_missing(cfg, store, pipeline):
+    shutil.rmtree(cfg.downloads_root)
+    with pytest.raises(CheckFailed, match="mounted"):
+        _probe(build_checks(cfg, store, pipeline), "staging")
+
+
+def test_a_password_embedded_in_qb_url_is_masked_in_a_detail(cfg):
+    cfg = replace(cfg, qb_url="http://u:proxy-pass@qb:8999")
+    registry = HealthRegistry([check()], secrets=cfg.secrets())
+    registry.record(
+        "qbittorrent", "fail", "POST http://u:proxy-pass@qb:8999/api/v2/auth/login 401", 1.0
+    )
+    assert "proxy-pass" not in registry.snapshot()[0].detail

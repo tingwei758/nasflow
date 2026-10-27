@@ -102,9 +102,19 @@ def test_only_api_js_calls_health(api):
 def test_check_labels_are_not_hardcoded_in_js():
     """The strip renders whatever /api/health labels its checks.
 
-    Scoped to board.js, which draws the strip: resolve.js says "TMDB" for its
-    own manual-search controls, which has nothing to do with a check label.
+    resolve.js says "TMDB" for its own manual-search controls, which has
+    nothing to do with a check label; that one pair is the only exemption.
     """
-    text = (STATIC / "board.js").read_text(encoding="utf-8")
-    for label in ("qBittorrent", "TMDB", "Staging folder", "Database", "Polling"):
-        assert label not in text, f"board.js hardcodes {label!r}"
+    exempt = {("resolve.js", "TMDB")}
+    for name in MODULES:
+        text = (STATIC / name).read_text(encoding="utf-8")
+        for label in ("qBittorrent", "TMDB", "Staging folder", "Database", "Polling"):
+            if (name, label) in exempt:
+                continue
+            assert label not in text, f"{name} hardcodes {label!r}"
+
+
+def test_health_strip_is_grouped_not_announced(api):
+    """A dot changing colour every few minutes is not worth interrupting for."""
+    tag = next(line for line in api[0].get("/").text.splitlines() if 'id="health"' in line)
+    assert 'role="group"' in tag and "aria-live" not in tag and 'role="status"' not in tag

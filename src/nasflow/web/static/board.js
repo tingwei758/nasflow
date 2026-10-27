@@ -16,6 +16,7 @@ const healthNode = document.getElementById("health");
 
 let meta = null;
 let lastBoard = null;
+let lastHealth = null;
 
 function cardSubtitle(column, item) {
   switch (column) {
@@ -71,19 +72,21 @@ function render(board) {
 }
 
 // Every label and reason comes from the server, so a check added there needs
-// no change here.
+// no change here. The dot carries the status for anyone who can't see colour:
+// role="img" is what makes its aria-label count, which a bare span's generic
+// role does not.
 function renderHealth(health) {
   const failing = health.checks.filter((check) => check.status === "fail");
   healthNode.replaceChildren(
     ...health.checks.map((check) =>
       el(
         "span",
-        {
-          class: "light",
-          title: `${check.label}: ${check.status} — ${check.detail}`,
+        { class: "light", title: `${check.label}: ${check.status} — ${check.detail}` },
+        el("span", {
+          class: `dot dot-${check.status}`,
+          role: "img",
           "aria-label": `${check.label}: ${check.status} — ${check.detail}`,
-        },
-        el("span", { class: `dot dot-${check.status}` }),
+        }),
         check.label,
       ),
     ),
@@ -113,7 +116,13 @@ async function refresh() {
 
 async function refreshHealth() {
   try {
-    renderHealth(await getHealth());
+    const health = await getHealth();
+    // The checks run every 5-15 minutes, so most polls change nothing. Redrawing
+    // anyway would hand assistive tech the same five lights twice a minute.
+    const fingerprint = JSON.stringify(health);
+    if (fingerprint === lastHealth) return;
+    lastHealth = fingerprint;
+    renderHealth(health);
   } catch {
     // Keep the last lights: the board poll owns the "can't reach nasflow" line.
   }

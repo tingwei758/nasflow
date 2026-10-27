@@ -58,10 +58,7 @@ def build_app(cfg: Config, *, start_polling: bool = True) -> FastAPI:
     )
 
     # The board reads the last snapshot; the checker fills it in the background.
-    health = HealthRegistry(
-        build_checks(cfg, store, pipeline),
-        secrets=[cfg.tmdb_api_key, cfg.qb_password],
-    )
+    health = HealthRegistry(build_checks(cfg, store, pipeline), secrets=cfg.secrets())
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
@@ -134,7 +131,7 @@ def main(argv: list[str] | None = None) -> None:
         _fail(f"config file not found: {path}")
     except ValueError as exc:
         _fail(f"invalid config {path}: {exc}")
-    redact_secrets([cfg.tmdb_api_key, cfg.qb_password])
+    redact_secrets(cfg.secrets())
     try:
         check_same_filesystem(cfg)
     except ValueError as exc:

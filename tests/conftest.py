@@ -36,8 +36,7 @@ def web_pipeline(web_cfg):
 def health(web_cfg, web_pipeline):
     """The registry the board reads. Nothing has probed it, so every check is unknown."""
     return HealthRegistry(
-        build_checks(web_cfg, web_pipeline.store, web_pipeline),
-        secrets=[web_cfg.tmdb_api_key, web_cfg.qb_password],
+        build_checks(web_cfg, web_pipeline.store, web_pipeline), secrets=web_cfg.secrets()
     )
 
 

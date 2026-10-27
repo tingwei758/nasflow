@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from nasflow.config import load_config
+from nasflow.config import Config, load_config
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 
@@ -198,3 +198,18 @@ def test_health_settings_are_overridable(tmp_path):
         health_tick_s = 5
     """))
     assert (cfg.health_min_free_gb, cfg.health_tick_s) == (50, 5)
+
+
+def test_secrets_include_credentials_embedded_in_qb_url():
+    """httpx puts the whole request URL in its exception text, userinfo included."""
+    cfg = Config(
+        downloads_root=Path("/dl"), staging_root=Path("/st"), db_path=Path("/db"),
+        qb_url="http://u:proxy%2Dpass@qb:8999", qb_username="u", qb_password="pw-secret",
+        tmdb_api_key="key-123",
+    )
+    assert set(cfg.secrets()) >= {"pw-secret", "key-123", "proxy%2Dpass", "proxy-pass"}
+
+
+def test_secrets_are_just_the_two_fields_without_url_credentials(tmp_path):
+    cfg = load_config(write_minimal(tmp_path))
+    assert set(cfg.secrets()) == {"secret-pw", "secret-key"}

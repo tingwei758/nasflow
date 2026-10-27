@@ -573,3 +573,4 @@ Not a task; the check a human does once on the NAS.
 - [ ] Open the board: five lights, green within 30 seconds of start.
 - [ ] Put a wrong `qb_password` in `config.toml`, restart: the qBittorrent light goes red within ~5 minutes reading "login rejected: check qb_username / qb_password", the rest stay green, and the board still shows its cards.
 - [ ] Stop nasflow with the board open: the strip keeps its last lights and the cards stay on screen (only `#status` turns red), rather than blanking.
+- [ ] With the board open, hang the staging mount (or unmount the downloads volume): the staging light turns red within one tick plus the probe timeout, and the other four lights keep refreshing rather than freezing green.
