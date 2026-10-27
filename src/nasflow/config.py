@@ -71,6 +71,10 @@ class Config:
     require_english_title: bool = True
     bind_host: str = "0.0.0.0"
     bind_port: int = 9987
+    # The staging light turns red below this much free space.
+    health_min_free_gb: int = 20
+    # How often the checker looks for checks whose interval has elapsed.
+    health_tick_s: int = 30
     layout: LayoutConfig = LayoutConfig()
     media: MediaConfig = MediaConfig()
 

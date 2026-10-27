@@ -185,3 +185,16 @@ def test_sibling_roots_with_a_shared_prefix_are_fine(tmp_path):
 
 def test_existing_torrents_are_skipped_on_first_run_by_default(tmp_path):
     assert load_config(write_minimal(tmp_path)).skip_existing_on_first_run is True
+
+
+def test_health_settings_default_when_absent(tmp_path):
+    cfg = load_config(write_minimal(tmp_path))
+    assert (cfg.health_min_free_gb, cfg.health_tick_s) == (20, 30)
+
+
+def test_health_settings_are_overridable(tmp_path):
+    cfg = load_config(write_toml(tmp_path, """
+        health_min_free_gb = 50
+        health_tick_s = 5
+    """))
+    assert (cfg.health_min_free_gb, cfg.health_tick_s) == (50, 5)

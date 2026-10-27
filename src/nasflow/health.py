@@ -17,11 +17,14 @@ loop, the pipeline, or the linker does.
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 
+from .pathmap import nearest_existing
 from .qbit import QbitUnavailable
 from .redact import redact
 from .tmdb import TmdbUnavailable
@@ -33,6 +36,12 @@ TMDB_INTERVAL_S = 900.0
 LOCAL_INTERVAL_S = 300.0
 
 _NEVER_CHECKED = "not checked yet"
+
+_BYTES_PER_GB = 1024**3
+
+# How long the polling light tolerates silence: three cycles, and never less
+# than this, so a short poll interval does not make the light twitchy.
+_MIN_POLL_GRACE_S = 180.0
 
 
 class CheckFailed(RuntimeError):
@@ -124,6 +133,88 @@ def _describe(exc: BaseException) -> tuple[str, str]:
         return "fail", str(exc)
     # Unexpected: the type is the most useful thing we can say about it.
     return "fail", f"{type(exc).__name__}: {exc}"
+
+
+def _free_gb(path: Path) -> float:
+    """Free space in GB, by the same measure as `shutil.disk_usage().free`.
+
+    `os.statvfs` rather than `shutil.disk_usage` because `tests/test_confinement.py`
+    refuses a `shutil` import outside the linker: shutil is a write library, and
+    this module must never be able to touch a file.
+    """
+    try:
+        stats = os.statvfs(path)
+    except OSError as exc:
+        raise CheckFailed(f"cannot read staging: {exc}") from None
+    return stats.f_bavail * stats.f_frsize / _BYTES_PER_GB
+
+
+def _staging_probe(cfg) -> str:
+    """Hardlinks still possible, and room to make them.
+
+    Measured against each root's nearest existing parent: on first run staging
+    does not exist yet, and a path that is gone says nothing about the device
+    it used to be on. Deliberately not a real `os.link` probe — that writes
+    files, and a periodic writer in staging is worse than comparing devices.
+    """
+    downloads = nearest_existing(cfg.downloads_root)
+    staging = nearest_existing(cfg.staging_root)
+    try:
+        same_device = downloads.stat().st_dev == staging.stat().st_dev
+    except OSError as exc:
+        raise CheckFailed(f"cannot read staging: {exc}") from None
+    if not same_device:
+        raise CheckFailed(
+            f"{cfg.downloads_root} and {cfg.staging_root} are on different filesystems, "
+            "so no hardlink can be made"
+        )
+
+    free_gb = _free_gb(staging)
+    if free_gb < cfg.health_min_free_gb:
+        raise CheckFailed(
+            f"only {free_gb:.0f} GB free in staging (floor {cfg.health_min_free_gb} GB)"
+        )
+    return f"linkable, {free_gb:.0f} GB free"
+
+
+def _polling_probe(cfg, pipeline, now: Callable[[], float]) -> str:
+    """Whether the poll loop is still ticking — the one thing no other check sees."""
+    last = pipeline.last_poll_at
+    if last is None:
+        raise NotYetKnown("waiting for the first poll")
+    gap = now() - last
+    limit = max(3 * cfg.poll_interval_s, _MIN_POLL_GRACE_S)
+    if gap > limit:
+        raise CheckFailed(f"last poll was {gap:.0f}s ago (expected within {limit:.0f}s)")
+    return f"last poll {gap:.0f}s ago"
+
+
+def build_checks(cfg, store, pipeline, *, now=time.time) -> list[Check]:
+    """The five things that have to work for nasflow to file anything.
+
+    The clients come off the pipeline, so the checker probes the very same
+    instances the pipeline uses, session state included. Sharing them across
+    threads is safe: `httpx.Client` is thread-safe, and a race on qB's
+    authenticated flag costs at worst one redundant login.
+    """
+
+    def qbittorrent() -> str:
+        return f"version {pipeline.qbit.app_version()}"
+
+    def tmdb() -> str:
+        pipeline.tmdb.ping()
+        return "API key accepted"
+
+    def database() -> str:
+        return f"ok, {store.ping()} items"
+
+    return [
+        Check("qbittorrent", "qBittorrent", QB_INTERVAL_S, qbittorrent),
+        Check("tmdb", "TMDB", TMDB_INTERVAL_S, tmdb),
+        Check("staging", "Staging folder", LOCAL_INTERVAL_S, lambda: _staging_probe(cfg)),
+        Check("database", "Database", LOCAL_INTERVAL_S, database),
+        Check("polling", "Polling", LOCAL_INTERVAL_S, lambda: _polling_probe(cfg, pipeline, now)),
+    ]
 
 
 async def health_loop(

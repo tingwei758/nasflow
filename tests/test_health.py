@@ -1,10 +1,64 @@
 """The background checker: a registry of last results, and the loop that fills it."""
 
 import asyncio
+import shutil
 import time
-from collections import Counter
+from collections import Counter, namedtuple
+from pathlib import Path
 
-from nasflow.health import Check, CheckFailed, HealthRegistry, NotYetKnown, health_loop
+import pytest
+
+from nasflow import health
+from nasflow.config import Config
+from nasflow.db import Store
+from nasflow.health import (
+    Check,
+    CheckFailed,
+    HealthRegistry,
+    NotYetKnown,
+    build_checks,
+    health_loop,
+)
+from nasflow.pipeline import Pipeline
+
+from .test_pipeline import FakeQbit, FakeTmdb
+
+_StatVFS = namedtuple("_StatVFS", "f_bavail f_frsize")
+
+
+def statvfs(free_gb):
+    """Just the two fields `_free_gb` reads."""
+    return _StatVFS(f_bavail=free_gb * 1024**3 // 4096, f_frsize=4096)
+
+
+@pytest.fixture
+def cfg(tmp_path):
+    (tmp_path / "downloads").mkdir()
+    (tmp_path / "staging").mkdir()
+    return Config(
+        downloads_root=tmp_path / "downloads",
+        staging_root=tmp_path / "staging",
+        db_path=tmp_path / "nasflow.db",
+        qb_url="http://qb",
+        qb_username="u",
+        qb_password="p",
+        tmdb_api_key="k",
+    )
+
+
+@pytest.fixture
+def store(cfg):
+    return Store(cfg.db_path)
+
+
+@pytest.fixture
+def pipeline(cfg, store):
+    return Pipeline(cfg, store, FakeQbit(), FakeTmdb())
+
+
+def _probe(checks, name):
+    """Run one check's probe and return its detail."""
+    return next(c for c in checks if c.name == name).probe()
 
 
 async def _no_sleep(_seconds):
@@ -175,3 +229,87 @@ def test_loop_sleeps_the_configured_tick():
 
     asyncio.run(health_loop(_two_checks(), tick_s=7.0, sleep=record, max_iterations=2))
     assert slept == [7.0, 7.0]
+
+
+# ---- the five checks ---------------------------------------------------
+
+
+def test_build_checks_lists_the_five_in_display_order(cfg, store, pipeline):
+    names = [c.name for c in build_checks(cfg, store, pipeline)]
+    assert names == ["qbittorrent", "tmdb", "staging", "database", "polling"]
+
+
+def test_qbittorrent_check_reports_the_version(cfg, store, pipeline):
+    pipeline.qbit.version = "v4.6.5"
+    assert "4.6.5" in _probe(build_checks(cfg, store, pipeline), "qbittorrent")
+
+
+def test_tmdb_check_reports_the_key_was_accepted(cfg, store, pipeline):
+    assert _probe(build_checks(cfg, store, pipeline), "tmdb") == "API key accepted"
+
+
+def test_staging_check_is_ok_before_staging_exists(cfg, store, pipeline):
+    shutil.rmtree(cfg.staging_root)  # first run: not created yet
+    assert "free" in _probe(build_checks(cfg, store, pipeline), "staging")
+
+
+def test_staging_check_fails_across_filesystems(cfg, store, pipeline, monkeypatch):
+    real_stat = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        result = real_stat(self, *args, **kwargs)
+        if self == cfg.downloads_root:
+            return type("S", (), {"st_dev": result.st_dev + 1})()
+        return result
+
+    monkeypatch.setattr(Path, "stat", fake_stat)
+    with pytest.raises(CheckFailed, match="different filesystems"):
+        _probe(build_checks(cfg, store, pipeline), "staging")
+
+
+def test_staging_check_fails_below_the_free_space_floor(cfg, store, pipeline, monkeypatch):
+    monkeypatch.setattr(health.os, "statvfs", lambda p: statvfs(free_gb=3))
+    with pytest.raises(CheckFailed, match="3 GB free"):
+        _probe(build_checks(cfg, store, pipeline), "staging")  # floor is 20
+
+
+def test_staging_check_fails_when_the_mount_has_vanished(cfg, store, pipeline, monkeypatch):
+    def vanished(_path):
+        raise OSError("Stale file handle")
+
+    monkeypatch.setattr(health.os, "statvfs", vanished)
+    with pytest.raises(CheckFailed, match="Stale file handle"):
+        _probe(build_checks(cfg, store, pipeline), "staging")
+
+
+def test_database_check_reports_the_item_count(cfg, store, pipeline):
+    assert _probe(build_checks(cfg, store, pipeline), "database") == "ok, 0 items"
+
+
+def test_polling_check_is_unknown_before_the_first_poll(cfg, store, pipeline):
+    with pytest.raises(NotYetKnown):
+        _probe(build_checks(cfg, store, pipeline), "polling")
+
+
+def test_polling_check_is_ok_within_three_intervals(cfg, store, pipeline):
+    pipeline.last_poll_at = 1000.0
+    checks = build_checks(cfg, store, pipeline, now=lambda: 1042.0)
+    assert _probe(checks, "polling") == "last poll 42s ago"
+
+
+def test_polling_check_fails_when_the_loop_has_stalled(cfg, store, pipeline):
+    pipeline.last_poll_at = 1000.0  # poll_interval_s is 60 -> limit 180
+    checks = build_checks(cfg, store, pipeline, now=lambda: 1000.0 + 3600)
+    with pytest.raises(CheckFailed, match="3600s ago"):
+        _probe(checks, "polling")
+
+
+def test_intervals_match_the_spec(cfg, store, pipeline):
+    by_name = {c.name: c.interval_s for c in build_checks(cfg, store, pipeline)}
+    assert by_name == {
+        "qbittorrent": 300.0,
+        "tmdb": 900.0,
+        "staging": 300.0,
+        "database": 300.0,
+        "polling": 300.0,
+    }

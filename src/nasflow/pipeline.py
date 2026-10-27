@@ -11,6 +11,7 @@ from __future__ import annotations
 import functools
 import logging
 import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -62,11 +63,20 @@ class Pipeline:
         self.qbit = qbit
         self.tmdb = tmdb
         self._lock = threading.RLock()
+        # When the last poll finished, for the board's polling light. None until
+        # the first one completes; nothing reads it to make a decision.
+        self.last_poll_at: float | None = None
 
     # ---- driving ---------------------------------------------------------
 
     def poll_once(self) -> None:
         """Ask qBittorrent what has finished, and process anything new."""
+        self._poll_once()
+        # Only after a pass that did not raise: a stale timestamp is what tells
+        # the board the loop has wedged.
+        self.last_poll_at = time.time()
+
+    def _poll_once(self) -> None:
         try:
             torrents = self.qbit.completed_torrents()
         except QbitUnavailable as exc:

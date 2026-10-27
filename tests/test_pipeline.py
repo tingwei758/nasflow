@@ -23,6 +23,12 @@ class FakeQbit:
         self.torrents = list(torrents)
         self.fail = False
         self.checking = False
+        self.version = "v4.6.5"
+
+    def app_version(self):
+        if self.fail:
+            raise QbitUnavailable("down")
+        return self.version
 
     def completed_torrents(self):
         if self.fail:
@@ -52,6 +58,10 @@ class FakeTmdb:
                 if c.tmdb_id == tmdb_id:
                     return replace(c, score=1.0, reason="chosen by you")
         return None
+
+    def ping(self):
+        if self.fail:
+            raise TmdbUnavailable("down")
 
     def restore(self):
         self.fail = False
@@ -685,3 +695,23 @@ def test_upgrading_an_existing_database_keeps_every_item_as_it_was(env):
     assert store.get(waiting.hash).state == "needs_you"
     assert store.get(waiting.hash).chosen_tmdb_id == 1
     assert store.get_flag("baseline_taken") is True
+
+
+def test_last_poll_at_is_none_until_the_first_poll(env):
+    cfg, store, qbit, tmdb, _, _ = env
+    assert build(cfg, store, qbit, tmdb).last_poll_at is None
+
+
+def test_last_poll_at_is_set_after_a_poll(env):
+    cfg, store, qbit, tmdb, _, _ = env
+    pipeline = build(cfg, store, qbit, tmdb)
+    pipeline.poll_once()
+    assert pipeline.last_poll_at is not None
+
+
+def test_last_poll_at_is_set_even_when_qbittorrent_is_down(env):
+    cfg, store, qbit, tmdb, _, _ = env
+    qbit.fail = True
+    pipeline = build(cfg, store, qbit, tmdb)
+    pipeline.poll_once()
+    assert pipeline.last_poll_at is not None  # the loop ran; qB has its own light
