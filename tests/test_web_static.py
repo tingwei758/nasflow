@@ -88,3 +88,23 @@ def test_needs_you_item_carries_what_flow_parsed(api):
     assert item["parsed_year"] == 2011
     assert item["video_count"] == 1
     assert item["classification_reason"] == "single video, no episode markers"
+
+
+def test_health_strip_is_in_the_page(api):
+    assert 'id="health"' in api[0].get("/").text
+
+
+def test_only_api_js_calls_health(api):
+    assert "getHealth" in (STATIC / "api.js").read_text(encoding="utf-8")
+    assert "/api/health" not in (STATIC / "board.js").read_text(encoding="utf-8")
+
+
+def test_check_labels_are_not_hardcoded_in_js():
+    """The strip renders whatever /api/health labels its checks.
+
+    Scoped to board.js, which draws the strip: resolve.js says "TMDB" for its
+    own manual-search controls, which has nothing to do with a check label.
+    """
+    text = (STATIC / "board.js").read_text(encoding="utf-8")
+    for label in ("qBittorrent", "TMDB", "Staging folder", "Database", "Polling"):
+        assert label not in text, f"board.js hardcodes {label!r}"

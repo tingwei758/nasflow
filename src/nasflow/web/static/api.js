@@ -23,6 +23,7 @@ const item = (hash) => `/api/items/${encodeURIComponent(hash)}`;
 
 export const getMeta = () => request("GET", "/api/meta");
 export const getBoard = () => request("GET", "/api/board");
+export const getHealth = () => request("GET", "/api/health");
 export const resolveItem = (hash, tmdbId) =>
   request("POST", `${item(hash)}/resolve`, { tmdb_id: tmdbId });
 export const ignoreItem = (hash) => request("POST", `${item(hash)}/ignore`);
